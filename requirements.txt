@@ -9,3 +9,6 @@ matplotlib
 pycocotools
 scipy
 seaborn
+tensorrt
+nvidia-pyindex
+nvidia-tensorrt

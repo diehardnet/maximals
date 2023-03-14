@@ -11,6 +11,7 @@ from typing import Tuple, List, Dict, Union
 import timm
 import torch
 import torchvision
+import tensorrt
 import yaml
 
 import configs

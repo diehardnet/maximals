@@ -10,7 +10,7 @@ from socket import gethostname
 import configs
 
 ALL_DNNS = configs.CNN_CONFIGS
-ALL_DNNS += configs.VITS_CLASSIFICATION_CONFIGS
+ALL_DNNS = configs.VITS_CLASSIFICATION_CONFIGS
 
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
@@ -32,7 +32,7 @@ def configure(download_datasets: bool, download_models: bool):
     home = str(Path.home())
     jsons_path = f"data/{hostname}_jsons"
     if os.path.isdir(jsons_path) is False:
-        os.mkdir(jsons_path)
+        os.makedirs(jsons_path, exist_ok=True)
 
     if download_models:
         print("Download all the models")
@@ -97,7 +97,7 @@ def test_all_jsons(timeout=30):
 
 def download_models_process():
     links = [
-          # Diehardnet transfer learning
+        # Resnet 50
         "https://download.pytorch.org/models/resnet50-11ad3fa6.pth",
 
         # Deeplav3
@@ -160,9 +160,6 @@ def main():
     parser.add_argument('--downloaddataset', default=False, action="store_true",
                         help="Set to download the dataset, default is to not download. Needs internet.")
     args = parser.parse_args()
-
-    if os.path.islink("pytorch_scripts") is False:
-        raise NotADirectoryError("You have to create a symlink to pytorch_scripts to be able to run the setup")
 
     if args.testjsons != 0:
         test_all_jsons(timeout=args.testjsons)

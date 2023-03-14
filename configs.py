@@ -34,7 +34,9 @@ CLASSIFICATION = "classify"
 SEGMENTATION = "segmentation"
 
 DNN_GOAL = {
-    # Classification nets
+    # Classification CNNs
+    **{k: CLASSIFICATION for k in CNN_CONFIGS},
+    # Classification transformer
     **{k: CLASSIFICATION for k in VITS_CLASSIFICATION_CONFIGS},
     # Segmentation nets
 }
