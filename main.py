@@ -6,12 +6,12 @@ import os
 import random
 import re
 import time
-from typing import Tuple, List, Dict, Union
+from typing import Tuple, List, Dict, Union, Optional
 
 import timm
 import torch
 import torchvision
-import tensorrt
+import torch_tensorrt
 import yaml
 
 import configs
@@ -39,8 +39,6 @@ class Timer:
 
 def load_model(args: argparse.Namespace) -> [torch.nn.Module, torchvision.transforms.Compose]:
     checkpoint_path = f"{args.checkpointdir}/{args.ckpt}"
-
-    resize_size, model = None, None
     # First option is the baseline option
     if args.name in configs.RESNET50_IMAGENET_1K_V2_BASE:
         # Better for offline approach
@@ -58,7 +56,7 @@ def load_model(args: argparse.Namespace) -> [torch.nn.Module, torchvision.transf
         config = timm.data.resolve_data_config({}, model=model)
         transform = timm.data.transforms_factory.create_transform(**config)
     else:
-        transform = None
+        model = transform = None
         dnn_log_helper.log_and_crash(fatal_string=f"{args.name} model invalid")
     model.eval()
     model = model.to(configs.DEVICE)
@@ -66,8 +64,8 @@ def load_model(args: argparse.Namespace) -> [torch.nn.Module, torchvision.transf
     return model, transform
 
 
-def load_dataset(batch_size: int, dataset: str, test_sample: int,
-                 transform: torchvision.transforms.Compose) -> Tuple[List, List]:
+def load_dataset(batch_size: int, dataset: str, test_sample: int, use_tensorrt: bool,
+                 transform: torchvision.transforms.Compose) -> Tuple[List, List, List]:
     test_set = None
     if dataset == configs.IMAGENET:
         test_set = torchvision.datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=transform,
@@ -83,7 +81,7 @@ def load_dataset(batch_size: int, dataset: str, test_sample: int,
     # noinspection PyUnresolvedReferences
     subset = torch.utils.data.SequentialSampler(range(test_sample))
     input_dataset, input_labels = list(), list()
-
+    input_size, input_type = None, None
     # Data loader diff if it is coco
     if dataset == configs.COCO:
         # noinspection PyUnresolvedReferences
@@ -110,7 +108,14 @@ def load_dataset(batch_size: int, dataset: str, test_sample: int,
     # input_dataset = torch.stack(input_dataset).to(configs.DEVICE)
     # Fixed, only the input must be in the GPU
     # input_labels = torch.stack(input_labels).to(configs.DEVICE)
-    return input_dataset, input_labels
+
+    # Tensor rt option
+    inputs = None
+    if use_tensorrt is True:
+        inputs = [torch_tensorrt.Input(min_shape=input_dataset[-1].shape, opt_shape=input_dataset[-1].shape,
+                                       max_shape=input_dataset[-1].shape, dtype=input_dataset[-1].dtype)]
+
+    return input_dataset, input_labels, inputs
 
 
 def parse_args() -> Tuple[argparse.Namespace, List[str]]:
@@ -143,6 +148,7 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
                         help="Set this flag disable console logging")
     parser.add_argument('--goldpath', help="Path to the gold file")
     parser.add_argument('--checkpointdir', help="Path to checkpoint dir")
+    parser.add_argument('--usetensorrt', help="Use or not tensorrt.", default=False, action="store_true")
 
     args = parser.parse_args()
 
@@ -365,15 +371,18 @@ def main():
     dataset = args.dataset
     gold_path = args.goldpath
     iterations = args.iterations
+    use_tensorrt = args.usetensorrt
 
     # Load the model
     model, transform = load_model(args=args)
     # First step is to load the inputs in the memory
     timer.tic()
-    input_list, input_labels = load_dataset(batch_size=batch_size, dataset=dataset, test_sample=test_sample,
-                                            transform=transform)
+    input_list, input_labels, tensorrt_inputs = load_dataset(batch_size=batch_size, dataset=dataset,
+                                                             test_sample=test_sample, use_tensorrt=use_tensorrt,
+                                                             transform=transform)
     timer.toc()
     input_load_time = timer.diff_time_str
+
     # Terminal console
     main_logger_name = str(os.path.basename(__file__)).replace(".py", "")
     terminal_logger = console_logger.ColoredLogger(main_logger_name) if args.disableconsolelog is False else None
@@ -383,6 +392,11 @@ def main():
     timer.tic()
     if generate is False:
         golden = torch.load(gold_path)
+        if use_tensorrt:
+            model = torch.jit.load(f"{gold_path}_compiled_model.ts")
+    elif use_tensorrt is True:
+        # If tensorrt is selected then convert, only at generate
+        model = torch_tensorrt.compile(model, inputs=tensorrt_inputs)
     timer.toc()
     golden_load_diff_time = timer.diff_time_str
 
@@ -436,8 +450,9 @@ def main():
                 # Free cuda memory
                 torch.cuda.empty_cache()
                 model, _ = load_model(args=args)
-                input_list, input_labels = load_dataset(batch_size=batch_size, dataset=dataset, test_sample=test_sample,
-                                                        transform=transform)
+                input_list, input_labels, tensorrt_inputs = load_dataset(batch_size=batch_size, dataset=dataset,
+                                                                         test_sample=test_sample,
+                                                                         use_tensorrt=use_tensorrt, transform=transform)
 
             # Printing timing information
             if terminal_logger:
@@ -454,6 +469,8 @@ def main():
         torch.save(golden, gold_path)
         check_dnn_accuracy(predicted=golden, ground_truth=input_labels, output_logger=terminal_logger,
                            dnn_goal=dnn_goal)
+        if use_tensorrt is True:
+            torch.jit.save(model, f"{gold_path}_compiled_model.ts")
 
     if terminal_logger:
         terminal_logger.debug("Finish computation.")
