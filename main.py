@@ -6,13 +6,13 @@ import os
 import random
 import re
 import time
-from typing import Tuple, List, Dict, Union, Optional
+from typing import Tuple, List, Dict, Union
 
 import timm
 import torch
-import torchvision
+from torchvision import transforms as tv_transforms
+from torchvision import datasets as tv_datasets
 import torch_tensorrt
-import yaml
 
 import configs
 import console_logger
@@ -37,53 +37,43 @@ class Timer:
     def __repr__(self): return str(self)
 
 
-def load_model(args: argparse.Namespace) -> [torch.nn.Module, torchvision.transforms.Compose]:
-    checkpoint_path = f"{args.checkpointdir}/{args.ckpt}"
-    # First option is the baseline option
-    if args.name in configs.RESNET50_IMAGENET_1K_V2_BASE:
-        # Better for offline approach
-        weights = torchvision.models.ResNet50_Weights.IMAGENET1K_V2
-        resize_size = (224, 224)
-        transform = torchvision.transforms.Compose([torchvision.transforms.Resize(size=resize_size),
-                                                    torchvision.transforms.ToTensor(),
-                                                    torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                                                     std=[0.229, 0.224, 0.225])])
-
-        model = torchvision.models.resnet50(weights=weights)
-        model.load_state_dict(torch.load(checkpoint_path))
-    elif args.name in configs.VITS_CLASSIFICATION_CONFIGS:
-        model = timm.create_model(args.model, pretrained=True)
-        config = timm.data.resolve_data_config({}, model=model)
-        transform = timm.data.transforms_factory.create_transform(**config)
+def load_model(model_name: str, generate: bool, use_tensorrt: bool,
+               model_tensorrt_path: str) -> [torch.nn.Module, tv_transforms.Compose]:
+    if generate is False and use_tensorrt is True:
+        model = torch.jit.load(model_tensorrt_path)
     else:
-        model = transform = None
-        dnn_log_helper.log_and_crash(fatal_string=f"{args.name} model invalid")
-    model.eval()
+        # First option is the baseline option
+        model = timm.create_model(model_name, pretrained=True)
+        model.eval()
+
     model = model.to(configs.DEVICE)
+    config = timm.data.resolve_data_config({}, model=model)
+    transform = timm.data.transforms_factory.create_transform(**config)
 
     return model, transform
 
 
-def load_dataset(batch_size: int, dataset: str, test_sample: int, use_tensorrt: bool,
-                 transform: torchvision.transforms.Compose) -> Tuple[List, List, List]:
-    test_set = None
-    if dataset == configs.IMAGENET:
-        test_set = torchvision.datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=transform,
-                                                          split='val')
-    elif dataset == configs.COCO:
-        # This is only used when performing det/seg and these models already perform transforms
-        test_set = torchvision.datasets.coco.CocoDetection(root=configs.COCO_DATASET_VAL,
-                                                           annFile=configs.COCO_DATASET_ANNOTATIONS,
-                                                           transform=transform)
-    else:
-        dnn_log_helper.log_and_crash(fatal_string=f"Incorrect dataset {dataset}")
-
+def load_dataset(batch_size: int, dataset: str, test_sample: int,
+                 transform: tv_transforms.Compose) -> Tuple[List, List, List]:
     # noinspection PyUnresolvedReferences
     subset = torch.utils.data.SequentialSampler(range(test_sample))
     input_dataset, input_labels = list(), list()
-    input_size, input_type = None, None
-    # Data loader diff if it is coco
-    if dataset == configs.COCO:
+
+    if dataset == configs.IMAGENET:
+        test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=transform,
+                                                 split='val')
+        # noinspection PyUnresolvedReferences
+        test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=batch_size,
+                                                  shuffle=False, pin_memory=True)
+        for inputs, labels in test_loader:
+            # Only the inputs must be in the device
+            input_dataset.append(inputs.to(configs.DEVICE))
+            input_labels.append(labels)
+    elif dataset == configs.COCO:
+        # This is only used when performing det/seg and these models already perform transforms
+        test_set = tv_datasets.coco.CocoDetection(root=configs.COCO_DATASET_VAL,
+                                                  annFile=configs.COCO_DATASET_ANNOTATIONS,
+                                                  transform=transform)
         # noinspection PyUnresolvedReferences
         test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=batch_size,
                                                   shuffle=False, pin_memory=True, collate_fn=lambda x: x)
@@ -96,53 +86,16 @@ def load_dataset(batch_size: int, dataset: str, test_sample: int, use_tensorrt: 
             input_dataset.append(torch.stack(inputs).to(configs.DEVICE))
             # Labels keys dict_keys(['segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id'])
             input_labels.append(labels)
-    else:
-        # noinspection PyUnresolvedReferences
-        test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=batch_size,
-                                                  shuffle=False, pin_memory=True)
-        for inputs, labels in test_loader:
-            # Only the inputs must be in the device
-            input_dataset.append(inputs.to(configs.DEVICE))
-            input_labels.append(labels)
-    # Fixed, no need to stack if they will only be used in the host side
-    # input_dataset = torch.stack(input_dataset).to(configs.DEVICE)
-    # Fixed, only the input must be in the GPU
-    # input_labels = torch.stack(input_labels).to(configs.DEVICE)
 
-    # Tensor rt option
-    inputs = None
-    if use_tensorrt is True:
-        inputs = [torch_tensorrt.Input(min_shape=input_dataset[-1].shape, opt_shape=input_dataset[-1].shape,
-                                       max_shape=input_dataset[-1].shape, dtype=input_dataset[-1].dtype)]
-
-    return input_dataset, input_labels, inputs
+    return input_dataset, input_labels, list(input_dataset[-1].shape)
 
 
 def parse_args() -> Tuple[argparse.Namespace, List[str]]:
     """ Parse the args and return an args namespace and the tostring from the args    """
-    config_parser = argparse.ArgumentParser(description='PyTorch DNN radiation setup', add_help=False)
-    config_parser.add_argument('--config', default='', type=str, metavar='FILE',
-                               help='YAML config file specifying default arguments.')
-    args, remaining_argv = config_parser.parse_known_args()
-
-    defaults = {"option": "default"}
-
-    if args.config:
-        with open(args.config, 'r') as f:
-            cfg = yaml.safe_load(f)
-        defaults.update(**cfg)
-
-    # Parse rest of arguments
-    # Don't suppress add_help here, so it will handle -h
-    parser = argparse.ArgumentParser(
-        # Inherit options from config_parser
-        parents=[config_parser]
-    )
-    parser.set_defaults(**defaults)
-
+    parser = argparse.ArgumentParser(description='PyTorch Maximals radiation setup', add_help=True)
     # parser = argparse.ArgumentParser(description='PyTorch DNN radiation setup')
     parser.add_argument('--iterations', default=int(1e12), help="Iterations to run forever", type=int)
-    parser.add_argument('--testsamples', default=100, help="Test samples to be used in the test.", type=int)
+    parser.add_argument('--testsamples', default=128, help="Test samples to be used in the test.", type=int)
     parser.add_argument('--generate', default=False, action="store_true", help="Set this flag to generate the gold")
     parser.add_argument('--disableconsolelog', default=False, action="store_true",
                         help="Set this flag disable console logging")
@@ -150,19 +103,21 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
     parser.add_argument('--checkpointdir', help="Path to checkpoint dir")
     parser.add_argument('--usetensorrt', help="Use or not tensorrt.", default=False, action="store_true")
 
+    parser.add_argument('--model', help="Model name: " + ", ".join(configs.ALL_POSSIBLE_MODELS),
+                        type=str, default=configs.RESNET200D_IMAGENET_TIMM)
+    parser.add_argument('--batchsize', type=int, help="Batch size to be used.", default=1)
     args = parser.parse_args()
 
-    if args.testsamples % args.batch_size != 0:
+    if args.testsamples % args.batchsize != 0:
         dnn_log_helper.log_and_crash(fatal_string="Test samples should be multiple of batch size")
-    # double check in the names
-    base_config_name = os.path.basename(args.config)
-    if base_config_name.replace(".yaml", "") != args.name:
-        dnn_log_helper.log_and_crash(
-            fatal_string=f"DNN name must have the same name as the config file, now:{args.name} != {base_config_name}")
 
     # Check if it is only to generate the gold values
     if args.generate:
         args.iterations = 1
+
+    # Only valid models
+    if args.model not in configs.ALL_POSSIBLE_MODELS:
+        dnn_log_helper.log_and_crash(fatal_string=f"model == {args.model} is invalid")
 
     args_text_list = [f"{k}={v}" for k, v in vars(args).items()]
     return args, args_text_list
@@ -203,15 +158,21 @@ def compare_classification(output_tensor: torch.tensor,
                         output_logger.error(error_detail_ctr)
                     dnn_log_helper.log_error_detail(error_detail_ctr)
 
+            # Not necessary to save everything, only mark the batch
             # ------------ Check error on the whole output -------------------------------------------------------------
-            for i, (gold, found) in enumerate(zip(golden_batch, output_batch)):
-                diff = abs(gold - found)
-                if diff > float_threshold and output_errors < configs.MAXIMUM_ERRORS_PER_ITERATION:
-                    output_errors += 1
-                    error_detail_out = f"batch:{batch_id} img:{img_id} i:{i} g:{gold:.6e} o:{found:.6e}"
-                    if output_logger:
-                        output_logger.error(error_detail_out)
-                    dnn_log_helper.log_error_detail(error_detail_out)
+            # for i, (gold, found) in enumerate(zip(golden_batch, output_batch)):
+            #     diff = abs(gold - found)
+            #     if diff > float_threshold and output_errors < configs.MAXIMUM_ERRORS_PER_ITERATION:
+            #         output_errors += 1
+            #         error_detail_out = f"batch:{batch_id} img:{img_id} i:{i} g:{gold:.6e} o:{found:.6e}"
+            #         if output_logger:
+            #             output_logger.error(error_detail_out)
+            #         dnn_log_helper.log_error_detail(error_detail_out)
+            error_detail_out = f"batch:{batch_id} img:{img_id} output and gold differ"
+            output_errors += 1
+            if output_logger:
+                output_logger.error(error_detail_out)
+            dnn_log_helper.log_error_detail(error_detail_out)
 
     return output_errors
 
@@ -323,7 +284,7 @@ def check_dnn_accuracy(predicted: Union[Dict[str, List[torch.tensor]], torch.ten
         output_logger.debug(f"Correct predicted samples:{correct} - ({(correct / gt_count) * 100:.2f}%)")
 
 
-def update_golden(golden: torch.tensor, output: torch.tensor, dnn_goal: str) -> Dict[str, list]:
+def update_golden(golden: Dict[str, list], output: torch.tensor, dnn_goal: str) -> Dict[str, list]:
     if dnn_goal == configs.CLASSIFICATION:
         golden["output_list"].append(output)
         golden["top_k_labels"].append(
@@ -347,14 +308,15 @@ def copy_output_to_cpu(dnn_output: Union[torch.tensor, collections.OrderedDict],
 def main():
     args, args_text_list = parse_args()
     # Starting the setup
-    generate = args.generate
     args_text_list.append(f"GPU:{torch.cuda.get_device_name()}")
     # Define DNN goal
-    dnn_goal = configs.DNN_GOAL[args.name]
+    dnn_goal = configs.DNN_GOAL[args.model]
+    dataset = configs.DATASETS[dnn_goal]
     float_threshold = configs.DNN_THRESHOLD[dnn_goal]
     dnn_log_helper.start_setup_log_file(framework_name="PyTorch", framework_version=str(torch.__version__),
-                                        args_conf=args_text_list, dnn_name=args.name, activate_logging=not generate,
-                                        dnn_goal=dnn_goal, float_threshold=float_threshold)
+                                        args_conf=args_text_list, dnn_name=args.model,
+                                        activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
+                                        float_threshold=float_threshold)
 
     # Disable all torch grad
     torch.set_grad_enabled(mode=False)
@@ -366,20 +328,16 @@ def main():
 
     # Defining a timer
     timer = Timer()
-    batch_size = args.batch_size
-    test_sample = args.testsamples
-    dataset = args.dataset
-    gold_path = args.goldpath
-    iterations = args.iterations
-    use_tensorrt = args.usetensorrt
+    model_tensorrt_path = args.goldpath.replace(".pt", configs.TENSORRT_FILE_POSFIX)
 
     # Load the model
-    model, transform = load_model(args=args)
+    model, transform = load_model(model_name=args.model, generate=args.generate, use_tensorrt=args.usetensorrt,
+                                  model_tensorrt_path=model_tensorrt_path)
     # First step is to load the inputs in the memory
     timer.tic()
-    input_list, input_labels, tensorrt_inputs = load_dataset(batch_size=batch_size, dataset=dataset,
-                                                             test_sample=test_sample, use_tensorrt=use_tensorrt,
-                                                             transform=transform)
+    input_list, input_labels, input_shape = load_dataset(batch_size=args.batchsize, dataset=dataset,
+                                                         test_sample=args.testsamples,
+                                                         transform=transform)
     timer.toc()
     input_load_time = timer.diff_time_str
 
@@ -390,13 +348,12 @@ def main():
     # Load if it is not a gold generating op
     golden: Dict[str, List[torch.tensor]] = dict(output_list=list(), top_k_labels=list())
     timer.tic()
-    if generate is False:
-        golden = torch.load(gold_path)
-        if use_tensorrt:
-            model = torch.jit.load(f"{gold_path}_compiled_model.ts")
-    elif use_tensorrt is True:
+    if args.generate is False:
+        golden = torch.load(args.goldpath)
+    elif args.usetensorrt is True:
         # If tensorrt is selected then convert, only at generate
-        model = torch_tensorrt.compile(model, inputs=tensorrt_inputs)
+        tensorrt_inputs = [torch_tensorrt.Input(input_shape, dtype=torch.float32)]
+        model = torch_tensorrt.compile(model, inputs=tensorrt_inputs, enabled_precisions=torch.float32)
     timer.toc()
     golden_load_diff_time = timer.diff_time_str
 
@@ -407,7 +364,7 @@ def main():
 
     # Main setup loop
     setup_iteration = 0
-    while setup_iteration < iterations:
+    while setup_iteration < args.iterations:
         # Loop over the input list
         batch_id = 0  # It must be like this, because I may reload the list in the middle of the process
         while batch_id < len(input_list):
@@ -426,7 +383,7 @@ def main():
             # Then compare the golden with the output
             timer.tic()
             errors = 0
-            if generate is False:
+            if args.generate is False:
                 errors = compare(output_tensor=dnn_output_cpu,
                                  golden=golden,
                                  ground_truth_labels=input_labels,
@@ -435,8 +392,6 @@ def main():
                                  float_threshold=float_threshold)
             else:
                 golden = update_golden(golden=golden, output=dnn_output_cpu, dnn_goal=dnn_goal)
-                # show(all_batches_output=dnn_output_cpu, all_batches_input=batched_input, batch_id=batch_id,
-                #      model=args.model)
 
             timer.toc()
             comparison_time = timer.diff_time
@@ -449,10 +404,10 @@ def main():
                 del model
                 # Free cuda memory
                 torch.cuda.empty_cache()
-                model, _ = load_model(args=args)
-                input_list, input_labels, tensorrt_inputs = load_dataset(batch_size=batch_size, dataset=dataset,
-                                                                         test_sample=test_sample,
-                                                                         use_tensorrt=use_tensorrt, transform=transform)
+                model, _ = load_model(model_name=args.model, generate=args.generate, use_tensorrt=args.usetensorrt,
+                                      model_tensorrt_path=model_tensorrt_path)
+                input_list, input_labels, _ = load_dataset(batch_size=args.batchsize, dataset=dataset,
+                                                           test_sample=args.testsamples, transform=transform)
 
             # Printing timing information
             if terminal_logger:
@@ -465,12 +420,12 @@ def main():
             batch_id += 1
         setup_iteration += 1
 
-    if generate is True:
-        torch.save(golden, gold_path)
+    if args.generate is True:
+        torch.save(golden, args.goldpath)
         check_dnn_accuracy(predicted=golden, ground_truth=input_labels, output_logger=terminal_logger,
                            dnn_goal=dnn_goal)
-        if use_tensorrt is True:
-            torch.jit.save(model, f"{gold_path}_compiled_model.ts")
+        if args.usetensorrt is True:
+            torch.jit.save(model, model_tensorrt_path)
 
     if terminal_logger:
         terminal_logger.debug("Finish computation.")

@@ -10,13 +10,16 @@ from socket import gethostname
 import configs
 
 ALL_DNNS = configs.CNN_CONFIGS
-ALL_DNNS = configs.VITS_CLASSIFICATION_CONFIGS
+ALL_DNNS += configs.VIT_CLASSIFICATION_CONFIGS
 
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
+BATCH_SIZE = 8
+USE_TENSORRT = True
+
 TEST_SAMPLES = {
-    **{k: 64 * 4 for k in configs.CNN_CONFIGS},
-    **{k: 64 * 4 for k in configs.VITS_CLASSIFICATION_CONFIGS},
+    **{k: BATCH_SIZE * 10 for k in configs.CNN_CONFIGS},
+    **{k: BATCH_SIZE * 10 for k in configs.VIT_CLASSIFICATION_CONFIGS},
 }
 
 
@@ -45,25 +48,29 @@ def configure(download_datasets: bool, download_models: bool):
     script_name = "main.py"
     for dnn_model in ALL_DNNS:
         # Default filename will build the other names
-        default_file_name = dnn_model.replace(".yaml", "")
-        json_file_name = f"{jsons_path}/{default_file_name}.json"
+        # default_file_name = dnn_model.replace(".yaml", "")
+        json_file_name = f"{jsons_path}/{dnn_model}.json"
         data_dir = f"{current_directory}/data"
-        gold_path = f"{data_dir}/{default_file_name}.pt"
+        gold_path = f"{data_dir}/{dnn_model}.pt"
         checkpoint_dir = f"{data_dir}/checkpoints"
-        config_path = f"{current_directory}/configurations/{dnn_model}.yaml"
+        # config_path = f"{current_directory}/configurations/{dnn_model}.yaml"
         parameters = [
             f"{current_directory}/{script_name}",
             f"--iterations {ITERATIONS}",
             f"--testsamples {TEST_SAMPLES[dnn_model]}",
-            f"--config {config_path}",
+            f"--batchsize {BATCH_SIZE}",
+            # f"--config {config_path}",
             f"--checkpointdir {checkpoint_dir}",
             f"--goldpath {gold_path}",
+            f"--model {dnn_model}",
         ]
+        if USE_TENSORRT:
+            parameters.append("--usetensorrt")
         execute_parameters = parameters + ["--disableconsolelog"]
         command_list = [{
             "killcmd": f"pkill -9 -f {script_name}",
             "exec": " ".join(execute_parameters),
-            "codename": default_file_name,
+            "codename": dnn_model,
             "header": " ".join(execute_parameters)
         }]
 
