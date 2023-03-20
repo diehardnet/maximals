@@ -15,7 +15,7 @@ ALL_DNNS += configs.VIT_CLASSIFICATION_CONFIGS
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
 BATCH_SIZE = 8
-USE_TENSORRT = True
+USE_TENSORRT = False
 
 TEST_SAMPLES = {
     **{k: BATCH_SIZE * 10 for k in configs.CNN_CONFIGS},
@@ -45,7 +45,7 @@ def configure(download_datasets: bool, download_models: bool):
         download_datasets_process()
 
     current_directory = os.getcwd()
-    script_name = "main.py"
+    script_name = "setuppuretorch.py"
     for dnn_model in ALL_DNNS:
         # Default filename will build the other names
         # default_file_name = dnn_model.replace(".yaml", "")

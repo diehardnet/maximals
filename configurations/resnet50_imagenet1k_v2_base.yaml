@@ -1,7 +1,0 @@
-name: resnet50_imagenet1k_v2_base
-mode: validate
-ckpt: resnet50-11ad3fa6.pth
-dataset: imagenet
-num_gpus: 1
-model: resnet50_imagenet1k_v2_base
-batch_size: 64
