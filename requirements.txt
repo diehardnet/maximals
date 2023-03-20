@@ -12,3 +12,5 @@ seaborn
 tensorrt
 nvidia-pyindex
 nvidia-tensorrt
+
+torchinfo
