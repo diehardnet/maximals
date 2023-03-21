@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import numpy
 import torch
 import torchvision.transforms
 import pandas as pd
@@ -7,6 +8,8 @@ import configs
 import torchinfo
 import timm
 import gc
+
+OUTPUT_DATABASE = "../data/profile_layers.csv"
 
 
 def main():
@@ -27,19 +30,22 @@ def main():
         config = timm.data.resolve_data_config({}, model=model)
         transform = timm.data.transforms_factory.create_transform(**config)
         out_sample = torch.stack([transform(input_sample_pil)], dim=0).to("cuda:0")
-        info = torchinfo.summary(model=model, input_size=list(out_sample.shape), verbose=0)
+        info = torchinfo.summary(model=model, input_size=list(out_sample.shape), verbose=torchinfo.Verbosity.VERBOSE)
         # Freeing must be in this order
         model.cpu()
         out_sample.cpu()
         del out_sample, model, transform, config
         gc.collect()
         torch.cuda.empty_cache()
-        for info_i in info.summary_list:
-            data_list.append({"net": model_name, "layer": info_i.class_name})
+        for layer_info in info.summary_list:
+            if layer_info.is_leaf_layer and layer_info.executed:
+                data_list.append({
+                    "net": model_name, "layer": layer_info.class_name, "layer_params": layer_info.num_params,
+                    "depth": layer_info.depth, "output_size": numpy.prod(layer_info.output_size)
+                })
 
     df = pd.DataFrame(data_list)
-    df["count"] = 1
-    print(df.groupby(["net", "layer"]).sum())
+    df.to_csv(OUTPUT_DATABASE, index=False)
 
 
 if __name__ == '__main__':
