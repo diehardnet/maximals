@@ -11,7 +11,7 @@ import console_logger
 import dnn_log_helper
 
 from setuppuretorch import Timer, load_dataset, compare, copy_output_to_cpu
-from setuppuretorch import parse_args, update_golden, check_dnn_accuracy
+from setuppuretorch import parse_args, update_golden, check_dnn_accuracy, check_and_setup_gpu
 
 
 def load_model(model_name: str, generate: bool, model_tensorrt_path: str) -> [torch.nn.Module, tv_transforms.Compose]:
@@ -42,14 +42,8 @@ def main():
                                         activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
                                         float_threshold=float_threshold)
 
-    # Disable all torch grad
-    torch.set_grad_enabled(mode=False)
-    if torch.cuda.is_available() is False:
-        dnn_log_helper.log_and_crash(fatal_string=f"Device {configs.DEVICE} not available.")
-    dev_capability = torch.cuda.get_device_capability()
-    if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY:
-        dnn_log_helper.log_and_crash(fatal_string=f"Device cap:{dev_capability} is too old.")
-
+    # Check if device is ok and disable grad
+    check_and_setup_gpu()
     # Defining a timer
     timer = Timer()
     model_tensorrt_path = args.goldpath.replace(".pt", configs.TENSORRT_FILE_POSFIX)

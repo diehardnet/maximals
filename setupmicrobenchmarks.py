@@ -1,28 +1,58 @@
 #!/usr/bin/python3
+import logging
 import os
 import torch
+from torch import Tensor
+
 import configs
 import console_logger
 import dnn_log_helper
 
-from setuppuretorch import parse_args, Timer, equal
+from setuppuretorch import parse_args, Timer, equal, check_and_setup_gpu
+
+CONV2D = "conv2d"
+BATCH_NORM2D = "batchnorm2d"
+RELU = "relu"
+LINEAR = "linear"
+ALL_MICRO_OPS = [CONV2D, BATCH_NORM2D, RELU, LINEAR]
+MICROBENCHMARK_FLOAT_THRESHOLD = 0
 
 
-def load_micro_input(generate: bool, microbenchmark_type: str) -> torch.tensor:
-    return torch.rand(1, 3, 224, 224)
+# MaxPool2d, Identity, AvgPool2d, AdaptiveAvgPool2d , Flatten,SiLU ,Sigmoid = enum.auto()
+# Dropout , LayerNorm ,GELU ,Softmax ,DropPath = enum.auto()
 
 
-def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_threshold: float) -> int:
+def load_micro_forward_and_input(generate: bool, microbenchmark_type: str) -> tuple[Tensor, callable]:
+    input_tensor = torch.empty()
+    microbenchmark_type = microbenchmark_type.lower()
+    if microbenchmark_type == CONV2D:
+        forward_operation = torch.nn.Conv2d
+    elif microbenchmark_type == BATCH_NORM2D:
+        forward_operation = torch.nn.BatchNorm2d
+    elif microbenchmark_type == RELU:
+        forward_operation = torch.nn.ReLU
+    elif microbenchmark_type == LINEAR:
+        forward_operation = torch.nn.Linear
+    else:
+        raise NotImplementedError("Type not implemented")
+    return input_tensor, forward_operation
+
+
+def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_threshold: float,
+            output_logger: logging.Logger, ) -> int:
     output_errors = 0
 
     # First check if the tensors are equal or not
     if equal(rhs=output_tensor, lhs=golden_tensor, threshold=float_threshold) is True:
         return 0
+    # ------------ Check error on the whole output -------------------------------------------------------------
+    for i, (gold, found) in enumerate(zip(output_tensor, golden_tensor)):
+        if abs(gold - found) > float_threshold and output_errors < configs.MAXIMUM_ERRORS_PER_ITERATION:
+            output_errors += 1
+            if output_logger:
+                output_logger.error(f"i:{i} g:{gold:.6e} o:{found:.6e}")
+            dnn_log_helper.log_error_detail(f"i:{i} g:{gold:.6e} o:{found:.6e}")
     return output_errors
-
-
-def micro_forward(input_tensor: torch.tensor) -> torch.tensor:
-    return input_tensor
 
 
 def main():
@@ -30,21 +60,14 @@ def main():
     # Starting the setup
     args_text_list.append(f"GPU:{torch.cuda.get_device_name()}")
     # Define DNN goal
-    dnn_goal = configs.DNN_GOAL[args.model]
-    dataset = configs.DATASETS[dnn_goal]
-    float_threshold = configs.DNN_THRESHOLD[dnn_goal]
-    dnn_log_helper.start_setup_log_file(framework_name="PyTorchMicrobenchmarks",
+    dnn_log_helper.start_setup_log_file(framework_name="PyTorch",
                                         framework_version=str(torch.__version__), args_conf=args_text_list,
-                                        dnn_name=args.model, activate_logging=not args.generate, dnn_goal=dnn_goal,
-                                        dataset=dataset, float_threshold=float_threshold)
+                                        dnn_name="Microbenchmark", activate_logging=not args.generate,
+                                        dnn_goal=args.microtype,
+                                        dataset="random", float_threshold=MICROBENCHMARK_FLOAT_THRESHOLD)
 
-    # Disable all torch grad
-    torch.set_grad_enabled(mode=False)
-    if torch.cuda.is_available() is False:
-        dnn_log_helper.log_and_crash(fatal_string=f"Device {configs.DEVICE} not available.")
-    dev_capability = torch.cuda.get_device_capability()
-    if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY:
-        dnn_log_helper.log_and_crash(fatal_string=f"Device cap:{dev_capability} is too old.")
+    # Check if device is ok and disable grad
+    check_and_setup_gpu()
 
     # Defining a timer
     timer = Timer()
@@ -54,9 +77,10 @@ def main():
 
     # First step is to load the inputs in the memory
     timer.tic()
-    input_micro = load_micro_input(generate=args.generate, microbenchmark_type=args.microtype)
+    input_micro, forward_call = load_micro_forward_and_input(generate=args.generate, microbenchmark_type=args.microtype)
     # Load if it is not a gold generating op
     golden: torch.tensor = torch.load(args.goldpath) if args.generate is False else torch.empty(0)
+    output_tensor_cpu: torch.tensor = torch.empty()
     timer.toc()
     if terminal_logger:
         terminal_logger.debug("\n".join(args_text_list))
@@ -68,7 +92,7 @@ def main():
         # Loop over the input list
         timer.tic()
         dnn_log_helper.start_iteration()
-        output_tensor = micro_forward(input_tensor=input_micro)
+        output_tensor = forward_call(input_tensor=input_micro)
         torch.cuda.synchronize(device=configs.DEVICE)
         dnn_log_helper.end_iteration()
         timer.toc()
@@ -82,7 +106,8 @@ def main():
         timer.tic()
         errors = 0
         if args.generate is False:
-            errors = compare(output_tensor=output_tensor_cpu, golden_tensor=golden, float_threshold=float_threshold)
+            errors = compare(output_tensor=output_tensor_cpu, golden_tensor=golden,
+                             float_threshold=MICROBENCHMARK_FLOAT_THRESHOLD, output_logger=terminal_logger)
 
         timer.toc()
         comparison_time = timer.diff_time
@@ -94,7 +119,7 @@ def main():
             del input_micro
             # Free cuda memory
             torch.cuda.empty_cache()
-            input_micro = load_micro_input(generate=args.generate, microbenchmark_type=args.microtype)
+            input_micro = load_micro_forward_and_input(generate=args.generate, microbenchmark_type=args.microtype)
 
         # Printing timing information
         if terminal_logger:
@@ -107,7 +132,7 @@ def main():
         setup_iteration += 1
 
     if args.generate is True:
-        torch.save(golden, args.goldpath)
+        torch.save(output_tensor_cpu, args.goldpath)
 
     if terminal_logger:
         terminal_logger.debug("Finish computation.")

@@ -296,6 +296,16 @@ def copy_output_to_cpu(dnn_output: Union[torch.tensor, collections.OrderedDict],
         return dnn_output["out"].to('cpu')
 
 
+def check_and_setup_gpu() -> None:
+    # Disable all torch grad
+    torch.set_grad_enabled(mode=False)
+    if torch.cuda.is_available() is False:
+        dnn_log_helper.log_and_crash(fatal_string=f"Device {configs.DEVICE} not available.")
+    dev_capability = torch.cuda.get_device_capability()
+    if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY:
+        dnn_log_helper.log_and_crash(fatal_string=f"Device cap:{dev_capability} is too old.")
+
+
 def main():
     args, args_text_list = parse_args()
     # Starting the setup
@@ -309,13 +319,8 @@ def main():
                                         activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
                                         float_threshold=float_threshold)
 
-    # Disable all torch grad
-    torch.set_grad_enabled(mode=False)
-    if torch.cuda.is_available() is False:
-        dnn_log_helper.log_and_crash(fatal_string=f"Device {configs.DEVICE} not available.")
-    dev_capability = torch.cuda.get_device_capability()
-    if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY:
-        dnn_log_helper.log_and_crash(fatal_string=f"Device cap:{dev_capability} is too old.")
+    # Check if device is ok and disable grad
+    check_and_setup_gpu()
 
     # Defining a timer
     timer = Timer()

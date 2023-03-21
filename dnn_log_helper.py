@@ -16,7 +16,7 @@ def start_setup_log_file(framework_name: str, framework_version: str, args_conf:
                          activate_logging: bool, dnn_goal: str, float_threshold: float, dataset: str) -> None:
     global __LOGGING_ACTIVE
     __LOGGING_ACTIVE = activate_logging
-    dnn_log_header = f"framework:{framework_name} framework_version:{framework_version} dnn_goal:{dnn_goal} "
+    dnn_log_header = f"framework:{framework_name} framework_version:{framework_version} goal:{dnn_goal} "
     dnn_log_header += f"topk:{configs.CLASSIFICATION_CRITICAL_TOP_K} float_threshold:{float_threshold} "
     dnn_log_header += f"dataset:{dataset} "
     dnn_log_header += " ".join(args_conf)
