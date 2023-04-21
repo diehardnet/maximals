@@ -49,7 +49,7 @@ def load_model(model_name: str) -> [torch.nn.Module, tv_transforms.Compose]:
 def load_dataset(batch_size: int, dataset: str, test_sample: int,
                  transform: tv_transforms.Compose) -> Tuple[List, List]:
     # noinspection PyUnresolvedReferences
-    subset = torch.utils.data.SequentialSampler(range(test_sample))
+    subset = torch.utils.data.SequentialSampler(range(0, 100000, int(100000 / test_sample)))
     input_dataset, input_labels = list(), list()
 
     if dataset == configs.IMAGENET:
@@ -95,7 +95,7 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
     parser.add_argument('--goldpath', help="Path to the gold file")
     parser.add_argument('--checkpointdir', help="Path to checkpoint dir")
     parser.add_argument('--model', help="Model name: " + ", ".join(configs.ALL_POSSIBLE_MODELS),
-                        type=str, default=configs.RESNET200D_IMAGENET_TIMM)
+                        type=str, default=configs.RESNET50D_IMAGENET_TIMM)
     parser.add_argument('--batchsize', type=int, help="Batch size to be used.", default=1)
     args = parser.parse_args()
 
@@ -272,7 +272,10 @@ def check_dnn_accuracy(predicted: Union[Dict[str, List[torch.tensor]], torch.ten
             gt_count += len(gt)
 
     if output_logger:
-        output_logger.debug(f"Correct predicted samples:{correct} - ({(correct / gt_count) * 100:.2f}%)")
+        correctness = correct / gt_count
+        output_logger.debug(f"Correct predicted samples:{correct} - ({correctness * 100:.2f}%)")
+        if correctness < 0.5:
+            dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY LOWER THAN 50%")
 
 
 def update_golden(golden: Dict[str, list], output: torch.tensor, dnn_goal: str) -> Dict[str, list]:
