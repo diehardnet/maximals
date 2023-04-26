@@ -31,17 +31,31 @@ VIT_LARGE_PATCH14_CLIP_224 = "vit_large_patch14_clip_224"
 # Huge models
 VIT_HUGE_PATCH14_CLIP_336 = "vit_huge_patch14_clip_336"
 VIT_HUGE_PATCH14_CLIP_224 = "vit_huge_patch14_clip_224"
+
 # Max vit
+# https://huggingface.co/timm/maxvit_large_tf_384.in21k_ft_in1k
+# https://huggingface.co/timm/maxvit_large_tf_512.in21k_ft_in1k
 MAXVIT_LARGE_TF_384 = 'maxvit_large_tf_384'
 MAXVIT_LARGE_TF_512 = 'maxvit_large_tf_512'
 # Davit
+# https://huggingface.co/timm/davit_small.msft_in1k
+# https://huggingface.co/timm/davit_base.msft_in1k
 DAVIT_BASE = 'davit_base'
+DAVIT_SMALL = 'davit_small'
 # SwinV2
+# https://huggingface.co/timm/swinv2_base_window12to16_192to256.ms_in22k_ft_in1k
+# https://huggingface.co/timm/swinv2_base_window12to24_192to384.ms_in22k_ft_in1k
+# https://huggingface.co/timm/swinv2_large_window12to16_192to256.ms_in22k_ft_in1k
+# https://huggingface.co/timm/swinv2_large_window12to24_192to384.ms_in22k_ft_in1k
 SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_base_window12to16_192to256_22kft1k'
 SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_base_window12to24_192to384_22kft1k'
-
 SWINV2_LARGE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_large_window12to16_192to256_22kft1k'
 SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_large_window12to24_192to384_22kft1k'
+
+# EVA
+# https://huggingface.co/timm/eva02_large_patch14_448.mim_m38m_ft_in1k
+EVA_LARGE_PATCH14_448_MIM = "eva02_large_patch14_448.mim_in22k_ft_in22k_in1k"
+EVA_BASE_PATCH14_448_MIM = "eva02_base_patch14_448.mim_in22k_ft_in22k_in1k"
 
 VIT_CLASSIFICATION_CONFIGS = [
     VIT_BASE_PATCH16_224,
@@ -54,10 +68,13 @@ VIT_CLASSIFICATION_CONFIGS = [
     MAXVIT_LARGE_TF_384,
     MAXVIT_LARGE_TF_512,
     DAVIT_BASE,
+    DAVIT_SMALL,
     SWINV2_LARGE_WINDOW12TO16_192to256_22KFT1K,
     SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K,
     SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K,
     SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K,
+    EVA_LARGE_PATCH14_448_MIM,
+    EVA_BASE_PATCH14_448_MIM
 ]
 
 ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS

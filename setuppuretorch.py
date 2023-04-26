@@ -122,6 +122,12 @@ def equal(rhs: torch.Tensor, lhs: torch.Tensor, threshold: float = 0) -> bool:
         return bool(torch.equal(rhs, lhs))
 
 
+def get_top_k_labels(input_tensor: torch.tensor, top_k: int) -> torch.tensor:
+    # Apply softmax to get predicted probabilities for each class
+    probabilities = torch.nn.functional.softmax(input_tensor, dim=0)
+    return torch.topk(probabilities, k=top_k).indices.squeeze(0)
+
+
 def compare_classification(output_tensor: torch.tensor,
                            golden_tensor: torch.tensor,
                            golden_top_k_labels: torch.tensor,
@@ -136,8 +142,8 @@ def compare_classification(output_tensor: torch.tensor,
         # using the same approach as the detection, compare only the positions that differ
         if equal(rhs=golden_batch, lhs=output_batch, threshold=float_threshold) is False:
             # ------------ Check if there is a Critical error ----------------------------------------------------------
-            # TODO: Check the topk  and softmax thing
-            top_k_batch_label_flatten = torch.topk(output_batch, k=top_k).indices.squeeze(0).flatten()
+            # top_k_batch_label_flatten = torch.topk(output_batch, k=top_k).indices.squeeze(0).flatten()
+            top_k_batch_label_flatten = get_top_k_labels(input_tensor=output_batch, top_k=top_k).flatten()
             golden_batch_label_flatten = golden_batch_label.flatten()
             for i, (tpk_found, tpk_gold) in enumerate(zip(golden_batch_label_flatten, top_k_batch_label_flatten)):
                 # Both are integers, and log only if it is feasible
@@ -276,17 +282,17 @@ def check_dnn_accuracy(predicted: Union[Dict[str, List[torch.tensor]], torch.ten
     if output_logger:
         correctness = correct / gt_count
         output_logger.debug(f"Correct predicted samples:{correct} - ({correctness * 100:.2f}%)")
-        if correctness < 0.5:
+        if correctness < 0.8:
             dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY LOWER THAN 50%")
 
 
 def update_golden(golden: Dict[str, list], output: torch.tensor, dnn_goal: str) -> Dict[str, list]:
     if dnn_goal == configs.CLASSIFICATION:
         golden["output_list"].append(output)
-        golden["top_k_labels"].append(
-            torch.tensor([torch.topk(output_batch, k=configs.CLASSIFICATION_CRITICAL_TOP_K).indices.squeeze(0)
-                          for output_batch in output])
-        )
+        golden["top_k_labels"].append(torch.tensor(
+            [get_top_k_labels(input_tensor=output_batch, top_k=configs.CLASSIFICATION_CRITICAL_TOP_K) for output_batch
+             in output]
+        ))
     elif dnn_goal == configs.SEGMENTATION:
         golden["output_list"].append(output)
 
