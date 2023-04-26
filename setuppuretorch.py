@@ -47,9 +47,9 @@ def load_model(model_name: str) -> [torch.nn.Module, tv_transforms.Compose]:
 
 
 def load_dataset(batch_size: int, dataset: str, test_sample: int,
-                 transform: tv_transforms.Compose) -> Tuple[List, List]:
-    # noinspection PyUnresolvedReferences
-    subset = torch.utils.data.SequentialSampler(range(0, 100000, int(100000 / test_sample)))
+                 transform: tv_transforms.Compose) -> Tuple[List, List, range]:
+    original_order = range(0, configs.DATASET_MAX_SIZE, int(configs.DATASET_MAX_SIZE / test_sample))
+    subset = torch.utils.data.SequentialSampler(original_order)
     input_dataset, input_labels = list(), list()
 
     if dataset == configs.IMAGENET:
@@ -80,7 +80,7 @@ def load_dataset(batch_size: int, dataset: str, test_sample: int,
             # Labels keys dict_keys(['segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id'])
             input_labels.append(labels)
 
-    return input_dataset, input_labels
+    return input_dataset, input_labels, original_order
 
 
 def parse_args() -> Tuple[argparse.Namespace, List[str]]:
@@ -128,23 +128,23 @@ def compare_classification(output_tensor: torch.tensor,
                            ground_truth_labels: torch.tensor,
                            batch_id: int,
                            top_k: int,
-                           output_logger: logging.Logger, float_threshold: float) -> int:
+                           output_logger: logging.Logger, float_threshold: float, original_dataset_order: range) -> int:
     output_errors = 0
-
     # Iterate over the batches
-    for img_id, (output_batch, golden_batch, golden_batch_label, ground_truth_label) in enumerate(
-            zip(output_tensor, golden_tensor, golden_top_k_labels, ground_truth_labels)):
+    for img_id, (real_img_id, output_batch, golden_batch, golden_batch_label, ground_truth_label) in enumerate(
+            zip(original_dataset_order, output_tensor, golden_tensor, golden_top_k_labels, ground_truth_labels)):
         # using the same approach as the detection, compare only the positions that differ
         if equal(rhs=golden_batch, lhs=output_batch, threshold=float_threshold) is False:
             # ------------ Check if there is a Critical error ----------------------------------------------------------
+            # TODO: Check the topk  and softmax thing
             top_k_batch_label_flatten = torch.topk(output_batch, k=top_k).indices.squeeze(0).flatten()
             golden_batch_label_flatten = golden_batch_label.flatten()
             for i, (tpk_found, tpk_gold) in enumerate(zip(golden_batch_label_flatten, top_k_batch_label_flatten)):
                 # Both are integers, and log only if it is feasible
                 if tpk_found != tpk_gold and output_errors < configs.MAXIMUM_ERRORS_PER_ITERATION:
                     output_errors += 1
-                    error_detail_ctr = f"batch:{batch_id} critical-img:{img_id} i:{i} g:{tpk_gold} o:{tpk_found}"
-                    error_detail_ctr += f" gt:{ground_truth_label}"
+                    error_detail_ctr = f"batch:{batch_id} critical imgid:{img_id} rimgid:{real_img_id}"
+                    error_detail_ctr += f" i:{i} g:{tpk_gold} o:{tpk_found} gt:{ground_truth_label}"
                     if output_logger:
                         output_logger.error(error_detail_ctr)
                     dnn_log_helper.log_error_detail(error_detail_ctr)
@@ -205,16 +205,17 @@ def compare(output_tensor: torch.tensor,
             golden: Dict[str, List[torch.tensor]],
             ground_truth_labels: Union[List[torch.tensor], List[dict]],
             batch_id: int,
-            output_logger: logging.Logger, dnn_goal: str, setup_iteration: int, float_threshold: float):
+            output_logger: logging.Logger, dnn_goal: str, setup_iteration: int, float_threshold: float,
+            original_dataset_order: range):
     golden_tensor = golden["output_list"][batch_id]
     # global TEST
     # TEST += 1
     # if TEST == 3:
     #     # # Simulate a non-critical error
-    #     output_tensor[8, 0] *= 0.9
+    #     # output_tensor[3, 0] *= 0.9
     #     # Simulate a critical error
-    #     # output_tensor[55, 0] = 39304
-    #     # # Shape SDC
+    #     output_tensor[3, 0] = 39304
+    #     # Shape SDC
     #     # output_tensor = torch.reshape(output_tensor, (4, 3200))
 
     # Make sure that they are on CPU
@@ -244,7 +245,8 @@ def compare(output_tensor: torch.tensor,
                                                ground_truth_labels=ground_truth_labels[batch_id],
                                                batch_id=batch_id,
                                                top_k=configs.CLASSIFICATION_CRITICAL_TOP_K,
-                                               output_logger=output_logger, float_threshold=float_threshold)
+                                               output_logger=output_logger, float_threshold=float_threshold,
+                                               original_dataset_order=original_dataset_order)
 
     elif dnn_goal == configs.SEGMENTATION:
         output_errors = compare_segmentation(output_tensor=output_tensor,
@@ -327,34 +329,31 @@ def main():
 
     # Defining a timer
     timer = Timer()
-
-    # Load the model
-    model, transform = load_model(model_name=args.model)
-    # First step is to load the inputs in the memory
-    timer.tic()
-    input_list, input_labels = load_dataset(batch_size=args.batchsize, dataset=dataset,
-                                            test_sample=args.testsamples,
-                                            transform=transform)
-    timer.toc()
-    input_load_time = timer.diff_time_str
-
     # Terminal console
     main_logger_name = str(os.path.basename(__file__)).replace(".py", "")
     terminal_logger = console_logger.ColoredLogger(main_logger_name) if args.disableconsolelog is False else None
 
     # Load if it is not a gold generating op
-    golden: Dict[str, List[torch.tensor]] = dict(output_list=list(), top_k_labels=list())
     timer.tic()
+    # This will save time
     if args.generate is False:
-        golden = torch.load(args.goldpath)
+        # Save everything in the same list
+        [golden, input_list, input_labels, model, original_dataset_order] = torch.load(args.goldpath)
+    else:
+        # First step is to load the inputs in the memory
+        # Load the model
+        model, transform = load_model(model_name=args.model)
+        input_list, input_labels, original_dataset_order = load_dataset(batch_size=args.batchsize, dataset=dataset,
+                                                                        test_sample=args.testsamples,
+                                                                        transform=transform)
+        golden: Dict[str, List[torch.tensor]] = dict(output_list=list(), top_k_labels=list())
 
     timer.toc()
     golden_load_diff_time = timer.diff_time_str
 
     if terminal_logger:
         terminal_logger.debug("\n".join(args_text_list))
-        terminal_logger.debug(f"Time necessary to load the inputs: {input_load_time}")
-        terminal_logger.debug(f"Time necessary to load the golden outputs: {golden_load_diff_time}")
+        terminal_logger.debug(f"Time necessary to load the golden outputs, model, and inputs: {golden_load_diff_time}")
 
     # Main setup loop
     setup_iteration = 0
@@ -383,7 +382,7 @@ def main():
                                  ground_truth_labels=input_labels,
                                  batch_id=batch_id,
                                  output_logger=terminal_logger, dnn_goal=dnn_goal, setup_iteration=setup_iteration,
-                                 float_threshold=float_threshold)
+                                 float_threshold=float_threshold, original_dataset_order=original_dataset_order)
             else:
                 golden = update_golden(golden=golden, output=dnn_output_cpu, dnn_goal=dnn_goal)
 
@@ -398,9 +397,8 @@ def main():
                 del model
                 # Free cuda memory
                 torch.cuda.empty_cache()
-                model, _ = load_model(model_name=args.model)
-                input_list, input_labels = load_dataset(batch_size=args.batchsize, dataset=dataset,
-                                                        test_sample=args.testsamples, transform=transform)
+                # Everything in the same list
+                [golden, input_list, input_labels, model, original_dataset_order] = torch.load(args.goldpath)
 
             # Printing timing information
             if terminal_logger:
@@ -414,7 +412,8 @@ def main():
         setup_iteration += 1
 
     if args.generate is True:
-        torch.save(golden, args.goldpath)
+        output_file = [golden, input_list, input_labels, model, original_dataset_order]
+        torch.save(output_file, args.goldpath)
         check_dnn_accuracy(predicted=golden, ground_truth=input_labels, output_logger=terminal_logger,
                            dnn_goal=dnn_goal)
 

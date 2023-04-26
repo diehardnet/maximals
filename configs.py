@@ -87,6 +87,9 @@ ITERATION_INTERVAL_LOG_HELPER_PRINT = {
     # Segmentation nets, huge
 }
 
+# This max size will determine the max number of images in all datasets
+DATASET_MAX_SIZE = 50000
+
 IMAGENET = "imagenet"
 COCO = "coco"
 DATASETS = {
