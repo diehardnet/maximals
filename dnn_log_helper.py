@@ -12,12 +12,12 @@ import configs
 __LOGGING_ACTIVE = False
 
 
-def start_setup_log_file(framework_name: str, framework_version: str, args_conf: list, dnn_name: str,
+def start_setup_log_file(framework_name: str, torch_version: str, timm_version: str, args_conf: list, dnn_name: str,
                          activate_logging: bool, dnn_goal: str, float_threshold: float, dataset: str) -> None:
     global __LOGGING_ACTIVE
     __LOGGING_ACTIVE = activate_logging
-    dnn_log_header = f"framework:{framework_name} framework_version:{framework_version} goal:{dnn_goal} "
-    dnn_log_header += f"topk:{configs.CLASSIFICATION_CRITICAL_TOP_K} float_threshold:{float_threshold} "
+    dnn_log_header = f"framework:{framework_name} torch_version:{torch_version} timm_version:{timm_version} "
+    dnn_log_header += f"goal:{dnn_goal} topk:{configs.CLASSIFICATION_CRITICAL_TOP_K} float_threshold:{float_threshold} "
     dnn_log_header += f"dataset:{dataset} "
     dnn_log_header += " ".join(args_conf)
     if __LOGGING_ACTIVE:

@@ -6,9 +6,11 @@ import os.path
 import time
 from pathlib import Path
 from socket import gethostname
-
+import torch
 import configs
 
+# It is either false or true
+TORCH_COMPILE_CONFIGS = {False, torch.cuda.get_device_capability()[0] >= 7}
 ALL_DNNS = configs.CNN_CONFIGS
 ALL_DNNS += configs.VIT_CLASSIFICATION_CONFIGS
 
@@ -46,42 +48,41 @@ def configure(download_datasets: bool, download_models: bool):
 
     current_directory = os.getcwd()
     script_name = "setuppuretorch.py"
-    for dnn_model in ALL_DNNS:
-        # Default filename will build the other names
-        # default_file_name = dnn_model.replace(".yaml", "")
-        json_file_name = f"{jsons_path}/{dnn_model}.json"
-        data_dir = f"{current_directory}/data"
-        gold_path = f"{data_dir}/{dnn_model}.pt"
-        checkpoint_dir = f"{data_dir}/checkpoints"
-        # config_path = f"{current_directory}/configurations/{dnn_model}.yaml"
-        parameters = [
-            f"{current_directory}/{script_name}",
-            f"--iterations {ITERATIONS}",
-            f"--testsamples {TEST_SAMPLES[dnn_model]}",
-            f"--batchsize {BATCH_SIZE}",
-            # f"--config {config_path}",
-            f"--checkpointdir {checkpoint_dir}",
-            f"--goldpath {gold_path}",
-            f"--model {dnn_model}",
-        ]
-        if USE_TENSORRT:
-            parameters.append("--usetensorrt")
-        execute_parameters = parameters + ["--disableconsolelog"]
-        command_list = [{
-            "killcmd": f"pkill -9 -f {script_name}",
-            "exec": " ".join(execute_parameters),
-            "codename": dnn_model,
-            "header": " ".join(execute_parameters)
-        }]
+    for torch_compile in TORCH_COMPILE_CONFIGS:
+        for dnn_model in ALL_DNNS:
+            configuration_name = f"{dnn_model}_torch_compile_{torch_compile}"
+            json_file_name = f"{jsons_path}/{configuration_name}.json"
+            data_dir = f"{current_directory}/data"
+            gold_path = f"{data_dir}/{configuration_name}.pt"
+            checkpoint_dir = f"{data_dir}/checkpoints"
+            parameters = [
+                f"{current_directory}/{script_name}",
+                f"--iterations {ITERATIONS}",
+                f"--testsamples {TEST_SAMPLES[dnn_model]}",
+                f"--batchsize {BATCH_SIZE}",
+                f"--checkpointdir {checkpoint_dir}",
+                f"--goldpath {gold_path}",
+                f"--model {dnn_model}",
+                f"--usetorchcompile" if torch_compile is True else ''
+            ]
+            if USE_TENSORRT:
+                parameters.append("--usetensorrt")
+            execute_parameters = parameters + ["--disableconsolelog"]
+            command_list = [{
+                "killcmd": f"pkill -9 -f {script_name}",
+                "exec": " ".join(execute_parameters),
+                "codename": dnn_model,
+                "header": " ".join(execute_parameters)
+            }]
 
-        generate_cmd = " ".join(parameters + ["--generate"])
-        # dump json
-        with open(json_file_name, "w") as json_fp:
-            json.dump(obj=command_list, fp=json_fp, indent=4)
+            generate_cmd = " ".join(parameters + ["--generate"])
+            # dump json
+            with open(json_file_name, "w") as json_fp:
+                json.dump(obj=command_list, fp=json_fp, indent=4)
 
-        print(f"Executing generate for {generate_cmd}")
-        if os.system(generate_cmd) != 0:
-            raise OSError(f"Could not execute command {generate_cmd}")
+            print(f"Executing generate for {generate_cmd}")
+            if os.system(generate_cmd) != 0:
+                raise OSError(f"Could not execute command {generate_cmd}")
 
     print("Json creation and golden generation finished")
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
@@ -90,16 +91,17 @@ def configure(download_datasets: bool, download_models: bool):
 def test_all_jsons(timeout=30):
     hostname = gethostname()
     current_directory = os.getcwd()
-    for config in ALL_DNNS:
-        file = f"{current_directory}/data/{hostname}_jsons/{config}.json"
-        with open(file, "r") as fp:
-            json_data = json.load(fp)
+    for torch_compile in TORCH_COMPILE_CONFIGS:
+        for config in ALL_DNNS:
+            file = f"{current_directory}/data/{hostname}_jsons/{config}_torch_compile_{torch_compile}.json"
+            with open(file, "r") as fp:
+                json_data = json.load(fp)
 
-        for v in json_data:
-            print("EXECUTING", v["exec"])
-            os.system(v['exec'] + "&")
-            time.sleep(timeout)
-            os.system(v["killcmd"])
+            for v in json_data:
+                print("EXECUTING", v["exec"])
+                os.system(v['exec'] + "&")
+                time.sleep(timeout)
+                os.system(v["killcmd"])
 
 
 def download_models_process():

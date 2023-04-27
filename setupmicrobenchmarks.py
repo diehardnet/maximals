@@ -61,7 +61,7 @@ def main():
     args_text_list.append(f"GPU:{torch.cuda.get_device_name()}")
     # Define DNN goal
     dnn_log_helper.start_setup_log_file(framework_name="PyTorch",
-                                        framework_version=str(torch.__version__), args_conf=args_text_list,
+                                        torch_version=str(torch.__version__), args_conf=args_text_list,
                                         dnn_name="Microbenchmark", activate_logging=not args.generate,
                                         dnn_goal=args.microtype,
                                         dataset="random", float_threshold=MICROBENCHMARK_FLOAT_THRESHOLD)

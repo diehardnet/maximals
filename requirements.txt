@@ -1,11 +1,8 @@
 numpy
 torch
 torchvision
-PyYAML
 pandas
 timm
 typing
-matplotlib
-pycocotools
-scipy
-seaborn
+
+torchinfo

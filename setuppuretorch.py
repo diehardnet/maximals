@@ -36,13 +36,15 @@ class Timer:
     def __repr__(self): return str(self)
 
 
-def load_model(model_name: str) -> [torch.nn.Module, tv_transforms.Compose]:
+def load_model(model_name: str, torch_compile: bool) -> [torch.nn.Module, tv_transforms.Compose]:
     # First option is the baseline option
     model = timm.create_model(model_name, pretrained=True)
     model.eval()
     model = model.to(configs.DEVICE)
     config = timm.data.resolve_data_config({}, model=model)
     transform = timm.data.transforms_factory.create_transform(**config)
+    if torch_compile is True:
+        model = torch.compile(model=model)
     return model, transform
 
 
@@ -97,14 +99,25 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
     parser.add_argument('--model', help="Model name: " + ", ".join(configs.ALL_POSSIBLE_MODELS),
                         type=str, default=configs.RESNET50D_IMAGENET_TIMM)
     parser.add_argument('--batchsize', type=int, help="Batch size to be used.", default=1)
+    # Only for pytorch 2.0
+    parser.add_argument('--usetorchcompile', default=False, action="store_true",
+                        help="Disable or enable torch compile (GPU Arch >= 700")
     args = parser.parse_args()
 
     if args.testsamples % args.batchsize != 0:
         dnn_log_helper.log_and_crash(fatal_string="Test samples should be multiple of batch size")
 
     # Check if it is only to generate the gold values
-    if args.generate:
+    if args.generate is True:
         args.iterations = 1
+
+    if args.usetorchcompile is True:
+        version = int(re.match(r"(\d+)\..*", torch.__version__.strip()).group(1))
+        if version < 2:
+            dnn_log_helper.log_and_crash(fatal_string="Torch compile requires Pytorch >=2.0")
+        dev_capability = torch.cuda.get_device_capability()
+        if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY_TORCH_COMPILE:
+            raise ValueError(f"Device cap:{dev_capability[0]} is too old.")
 
     # Only valid models
     if args.model not in configs.ALL_POSSIBLE_MODELS:
@@ -145,9 +158,9 @@ def compare_classification(output_tensor: torch.tensor,
             # top_k_batch_label_flatten = torch.topk(output_batch, k=top_k).indices.squeeze(0).flatten()
             top_k_batch_label_flatten = get_top_k_labels(input_tensor=output_batch, top_k=top_k).flatten()
             golden_batch_label_flatten = golden_batch_label.flatten()
-            for i, (tpk_found, tpk_gold) in enumerate(zip(golden_batch_label_flatten, top_k_batch_label_flatten)):
+            for i, (tpk_gold, tpk_found) in enumerate(zip(golden_batch_label_flatten, top_k_batch_label_flatten)):
                 # Both are integers, and log only if it is feasible
-                if tpk_found != tpk_gold and output_errors < configs.MAXIMUM_ERRORS_PER_ITERATION:
+                if tpk_found != tpk_gold:
                     output_errors += 1
                     error_detail_ctr = f"batch:{batch_id} critical imgid:{img_id} rimgid:{real_img_id}"
                     error_detail_ctr += f" i:{i} g:{tpk_gold} o:{tpk_found} gt:{ground_truth_label}"
@@ -325,10 +338,10 @@ def main():
     dnn_goal = configs.DNN_GOAL[args.model]
     dataset = configs.DATASETS[dnn_goal]
     float_threshold = configs.DNN_THRESHOLD[dnn_goal]
-    dnn_log_helper.start_setup_log_file(framework_name="PyTorch", framework_version=str(torch.__version__),
-                                        args_conf=args_text_list, dnn_name=args.model,
-                                        activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
-                                        float_threshold=float_threshold)
+    dnn_log_helper.start_setup_log_file(framework_name="PyTorch", torch_version=str(torch.__version__),
+                                        timm_version=str(timm.__version__), args_conf=args_text_list,
+                                        dnn_name=args.model, activate_logging=not args.generate, dnn_goal=dnn_goal,
+                                        dataset=dataset, float_threshold=float_threshold)
 
     # Check if device is ok and disable grad
     check_and_setup_gpu()
@@ -348,7 +361,7 @@ def main():
     else:
         # First step is to load the inputs in the memory
         # Load the model
-        model, transform = load_model(model_name=args.model)
+        model, transform = load_model(model_name=args.model, torch_compile=args.usetorchcompile)
         input_list, input_labels, original_dataset_order = load_dataset(batch_size=args.batchsize, dataset=dataset,
                                                                         test_sample=args.testsamples,
                                                                         transform=transform)

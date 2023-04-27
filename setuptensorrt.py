@@ -37,7 +37,7 @@ def main():
     dnn_goal = configs.DNN_GOAL[args.model]
     dataset = configs.DATASETS[dnn_goal]
     float_threshold = configs.DNN_THRESHOLD[dnn_goal]
-    dnn_log_helper.start_setup_log_file(framework_name="PyTorchTensorRT", framework_version=str(torch.__version__),
+    dnn_log_helper.start_setup_log_file(framework_name="PyTorchTensorRT", torch_version=str(torch.__version__),
                                         args_conf=args_text_list, dnn_name=args.model,
                                         activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
                                         float_threshold=float_threshold)

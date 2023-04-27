@@ -45,26 +45,6 @@ def main():
                     "depth": layer_info.depth, "output_size": numpy.prod(layer_info.output_size)
                 })
 
-    # Additional resnet torchvision
-    # model = torchvision.models.resnet50(weights="IMAGENET1K_V2").eval().to("cuda:0")
-    # transform = torchvision.transforms.Compose([torchvision.transforms.Resize(size=(224, 224)),
-    #                                             torchvision.transforms.ToTensor(),
-    #                                             torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                                                                              std=[0.229, 0.224, 0.225])])
-    # out_sample = torch.stack([transform(input_sample_pil)], dim=0).to("cuda:0")
-    # info = torchinfo.summary(model=model, input_size=list(out_sample.shape), verbose=torchinfo.Verbosity.VERBOSE)
-    # # Freeing must be in this order
-    # model.cpu()
-    # out_sample.cpu()
-    # del out_sample, model, transform
-    # gc.collect()
-    # torch.cuda.empty_cache()
-    # for layer_info in info.summary_list:
-    #     if layer_info.is_leaf_layer and layer_info.executed:
-    #         data_list.append({
-    #             "net": "resnet50", "layer": layer_info.class_name, "layer_params": layer_info.num_params,
-    #             "depth": layer_info.depth, "output_size": numpy.prod(layer_info.output_size)
-    #         })
     df = pd.DataFrame(data_list)
     df.to_csv(OUTPUT_DATABASE, index=False)
 
