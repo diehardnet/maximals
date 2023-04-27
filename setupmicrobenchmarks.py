@@ -2,13 +2,12 @@
 import logging
 import os
 import torch
-from torch import Tensor
-
+import timm
 import configs
 import console_logger
 import dnn_log_helper
 
-from setuppuretorch import parse_args, Timer, equal, check_and_setup_gpu
+from setuppuretorch import parse_args, Timer, equal, check_and_setup_gpu, print_setup_iteration
 
 CONV2D = "conv2d"
 BATCH_NORM2D = "batchnorm2d"
@@ -22,7 +21,7 @@ MICROBENCHMARK_FLOAT_THRESHOLD = 0
 # Dropout , LayerNorm ,GELU ,Softmax ,DropPath = enum.auto()
 
 
-def load_micro_forward_and_input(generate: bool, microbenchmark_type: str) -> tuple[Tensor, callable]:
+def load_micro_forward_and_input(generate: bool, microbenchmark_type: str) -> tuple[torch.tensor, callable]:
     input_tensor = torch.empty()
     microbenchmark_type = microbenchmark_type.lower()
     if microbenchmark_type == CONV2D:
@@ -57,14 +56,13 @@ def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_thre
 
 def main():
     args, args_text_list = parse_args()
-    # Starting the setup
-    args_text_list.append(f"GPU:{torch.cuda.get_device_name()}")
     # Define DNN goal
     dnn_log_helper.start_setup_log_file(framework_name="PyTorch",
-                                        torch_version=str(torch.__version__), args_conf=args_text_list,
+                                        torch_version=torch.__version__, timm_version=timm.__version__,
+                                        gpu=torch.cuda.get_device_name(), args_conf=args_text_list,
                                         dnn_name="Microbenchmark", activate_logging=not args.generate,
-                                        dnn_goal=args.microtype,
-                                        dataset="random", float_threshold=MICROBENCHMARK_FLOAT_THRESHOLD)
+                                        dnn_goal=args.microtype, dataset="random",
+                                        float_threshold=MICROBENCHMARK_FLOAT_THRESHOLD)
 
     # Check if device is ok and disable grad
     check_and_setup_gpu()
@@ -122,13 +120,9 @@ def main():
             input_micro = load_micro_forward_and_input(generate=args.generate, microbenchmark_type=args.microtype)
 
         # Printing timing information
-        if terminal_logger:
-            wasted_time = comparison_time + copy_to_cpu_time
-            time_pct = (wasted_time / (wasted_time + kernel_time)) * 100.0
-            iteration_out = f"It:{setup_iteration:<3} micro time:{kernel_time:.5f}, "
-            iteration_out += f"compare time:{comparison_time:.5f} copy time:{copy_to_cpu_time:.5f} "
-            iteration_out += f"(wasted:{time_pct:.1f}%) errors:{errors}"
-            terminal_logger.debug(iteration_out)
+        print_setup_iteration(batch_id=None, comparison_time=comparison_time, copy_to_cpu_time=copy_to_cpu_time,
+                              errors=errors, kernel_time=kernel_time, setup_iteration=setup_iteration,
+                              terminal_logger=terminal_logger)
         setup_iteration += 1
 
     if args.generate is True:

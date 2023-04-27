@@ -330,18 +330,28 @@ def check_and_setup_gpu() -> None:
         dnn_log_helper.log_and_crash(fatal_string=f"Device cap:{dev_capability} is too old.")
 
 
+def print_setup_iteration(batch_id: Union[int, None], comparison_time: float, copy_to_cpu_time: float, errors: int,
+                          kernel_time: float, setup_iteration: int, terminal_logger: logging.Logger) -> None:
+    if terminal_logger:
+        wasted_time = comparison_time + copy_to_cpu_time
+        time_pct = (wasted_time / (wasted_time + kernel_time)) * 100.0
+        iteration_out = f"It:{setup_iteration:<3} batch_id:{batch_id:<3} inference time:{kernel_time:.5f}, "
+        iteration_out += f"compare time:{comparison_time:.5f} copy time:{copy_to_cpu_time:.5f} "
+        iteration_out += f"(wasted:{time_pct:.1f}%) errors:{errors}"
+        terminal_logger.debug(iteration_out)
+
+
 def main():
     args, args_text_list = parse_args()
-    # Starting the setup
-    args_text_list.append(f"GPU:{torch.cuda.get_device_name()}")
     # Define DNN goal
     dnn_goal = configs.DNN_GOAL[args.model]
     dataset = configs.DATASETS[dnn_goal]
     float_threshold = configs.DNN_THRESHOLD[dnn_goal]
-    dnn_log_helper.start_setup_log_file(framework_name="PyTorch", torch_version=str(torch.__version__),
-                                        timm_version=str(timm.__version__), args_conf=args_text_list,
-                                        dnn_name=args.model, activate_logging=not args.generate, dnn_goal=dnn_goal,
-                                        dataset=dataset, float_threshold=float_threshold)
+    dnn_log_helper.start_setup_log_file(framework_name="PyTorch", torch_version=torch.__version__,
+                                        gpu=torch.cuda.get_device_name(), timm_version=timm.__version__,
+                                        args_conf=args_text_list, dnn_name=args.model,
+                                        activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
+                                        float_threshold=float_threshold)
 
     # Check if device is ok and disable grad
     check_and_setup_gpu()
@@ -420,13 +430,9 @@ def main():
                 [golden, input_list, input_labels, model, original_dataset_order] = torch.load(args.goldpath)
 
             # Printing timing information
-            if terminal_logger:
-                wasted_time = comparison_time + copy_to_cpu_time
-                time_pct = (wasted_time / (wasted_time + kernel_time)) * 100.0
-                iteration_out = f"It:{setup_iteration:<3} batch_id:{batch_id:<3} inference time:{kernel_time:.5f}, "
-                iteration_out += f"compare time:{comparison_time:.5f} copy time:{copy_to_cpu_time:.5f} "
-                iteration_out += f"(wasted:{time_pct:.1f}%) errors:{errors}"
-                terminal_logger.debug(iteration_out)
+            print_setup_iteration(batch_id=batch_id, comparison_time=comparison_time, copy_to_cpu_time=copy_to_cpu_time,
+                                  errors=errors, kernel_time=kernel_time, setup_iteration=setup_iteration,
+                                  terminal_logger=terminal_logger)
             batch_id += 1
         setup_iteration += 1
 
