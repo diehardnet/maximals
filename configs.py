@@ -22,36 +22,38 @@ CNN_CONFIGS = [
 # Classification ViTs
 # Base from the paper
 VIT_BASE_PATCH16_224 = "vit_base_patch16_224"
-VIT_BASE_PATCH32_224_SAM = "vit_base_patch32_224_sam"
 VIT_BASE_PATCH16_384 = "vit_base_patch16_384"
+# Same model as before see https://github.com/huggingface/pytorch-image-models/
+# blob/51b262e2507c50b277b5f6caa0d6bb7a386cba2e/timm/models/vision_transformer.py#L1864
+VIT_BASE_PATCH32_224_SAM = "vit_base_patch32_224.sam"
 VIT_BASE_PATCH32_384 = "vit_base_patch32_384"
 
 # Large models
-VIT_LARGE_PATCH14_CLIP_336 = "vit_large_patch14_clip_336"
-VIT_LARGE_PATCH14_CLIP_224 = "vit_large_patch14_clip_224"
+# https://pypi.org/project/timm/0.8.19.dev0/
+VIT_LARGE_PATCH14_CLIP_336 = "vit_large_patch14_clip_336.laion2b_ft_in12k_in1k"
+VIT_LARGE_PATCH14_CLIP_224 = "vit_large_patch14_clip_224.laion2b_ft_in12k_in1k"
 # Huge models
-VIT_HUGE_PATCH14_CLIP_336 = "vit_huge_patch14_clip_336"
-VIT_HUGE_PATCH14_CLIP_224 = "vit_huge_patch14_clip_224"
-
+VIT_HUGE_PATCH14_CLIP_336 = "vit_huge_patch14_clip_336.laion2b_ft_in12k_in1k"
+VIT_HUGE_PATCH14_CLIP_224 = "vit_huge_patch14_clip_224.laion2b_ft_in12k_in1k"
 # Max vit
 # https://huggingface.co/timm/maxvit_large_tf_384.in21k_ft_in1k
 # https://huggingface.co/timm/maxvit_large_tf_512.in21k_ft_in1k
-MAXVIT_LARGE_TF_384 = 'maxvit_large_tf_384'
-MAXVIT_LARGE_TF_512 = 'maxvit_large_tf_512'
+MAXVIT_LARGE_TF_384 = 'maxvit_large_tf_384.in21k_ft_in1k'
+MAXVIT_LARGE_TF_512 = 'maxvit_large_tf_512.in21k_ft_in1k'
 # Davit
 # https://huggingface.co/timm/davit_small.msft_in1k
 # https://huggingface.co/timm/davit_base.msft_in1k
-DAVIT_BASE = 'davit_base'
-DAVIT_SMALL = 'davit_small'
+DAVIT_BASE = 'davit_base.msft_in1k'
+DAVIT_SMALL = 'davit_small.msft_in1k'
 # SwinV2
 # https://huggingface.co/timm/swinv2_base_window12to16_192to256.ms_in22k_ft_in1k
 # https://huggingface.co/timm/swinv2_base_window12to24_192to384.ms_in22k_ft_in1k
 # https://huggingface.co/timm/swinv2_large_window12to16_192to256.ms_in22k_ft_in1k
 # https://huggingface.co/timm/swinv2_large_window12to24_192to384.ms_in22k_ft_in1k
-SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_base_window12to16_192to256_22kft1k'
-SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_base_window12to24_192to384_22kft1k'
-SWINV2_LARGE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_large_window12to16_192to256_22kft1k'
-SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_large_window12to24_192to384_22kft1k'
+SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_base_window12to16_192to256.ms_in22k_ft_in1k'
+SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_base_window12to24_192to384.ms_in22k_ft_in1k'
+SWINV2_LARGE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_large_window12to16_192to256.ms_in22k_ft_in1k'
+SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_large_window12to24_192to384.ms_in22k_ft_in1k'
 
 # EVA
 # https://huggingface.co/timm/eva02_large_patch14_448.mim_m38m_ft_in1k

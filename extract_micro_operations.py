@@ -28,6 +28,19 @@ def hook_fn(module: torch.nn.Module, module_input: torch.tensor,
     print("\n")
 
 
+# def hook_fn(m, i, o):
+#   visualisation[m] = o
+#
+# def get_all_layers(net):
+#   for name, layer in net._modules.items():
+#     #If it is a sequential, don't register a hook on it
+#     # but recursively register hook on all it's module children
+#     if isinstance(layer, nn.Sequential):
+#       get_all_layers(layer)
+#     else:
+#       # it's a non-sequential. Register a hook
+#       layer.register_forward_hook(hook_fn)
+
 def main():
     # Check if device is ok and disable grad
     check_and_setup_gpu()
@@ -42,14 +55,9 @@ def main():
             print(f"Extracting layers for {configuration_name}")
             [golden, input_list, input_labels, model, original_dataset_order] = torch.load(gold_path)
             # TODO: Fix hook pass
-            for name, param in model.named_parameters():
-                # if the param is from a linear and is a bias
-                # if "fc" in name and "bias" in name:
-                print(name)
-                param.register_hook(hook_fn)
+            for name, layer in model._modules.items():
+                layer.register_forward_hook(hook_fn)
             model(input_list[0])
-            break
-        break
 
     print("Finish computation.")
 
