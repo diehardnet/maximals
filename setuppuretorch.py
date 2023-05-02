@@ -44,8 +44,18 @@ def load_model(model_name: str, torch_compile: bool) -> [torch.nn.Module, tv_tra
     config = timm.data.resolve_data_config({}, model=model)
     transform = timm.data.transforms_factory.create_transform(**config)
     if torch_compile is True:
-        model = torch.compile(model=model)
+        model = torch.compile(model=model, mode="max-autotune")
+    # Disable also parameter grads
+    model.zero_grad(set_to_none=True)
     return model, transform
+
+
+def load_data_at_test(gold_path: str) -> Tuple:
+    # The order
+    # golden, input_list, input_labels, model, original_dataset_order
+    [golden, input_list, input_labels, model, original_dataset_order] = torch.load(gold_path)
+    model.zero_grad(set_to_none=True)
+    return golden, input_labels, input_list, model, original_dataset_order
 
 
 def load_dataset(batch_size: int, dataset: str, test_sample: int,
@@ -341,6 +351,8 @@ def print_setup_iteration(batch_id: Union[int, None], comparison_time: float, co
         terminal_logger.debug(iteration_out)
 
 
+# Force no grad
+@torch.no_grad()
 def main():
     args, args_text_list = parse_args()
     # Define DNN goal
@@ -367,7 +379,7 @@ def main():
     # This will save time
     if args.generate is False:
         # Save everything in the same list
-        [golden, input_list, input_labels, model, original_dataset_order] = torch.load(args.goldpath)
+        golden, input_labels, input_list, model, original_dataset_order = load_data_at_test(gold_path=args.goldpath)
     else:
         # First step is to load the inputs in the memory
         # Load the model
@@ -427,7 +439,8 @@ def main():
                 # Free cuda memory
                 torch.cuda.empty_cache()
                 # Everything in the same list
-                [golden, input_list, input_labels, model, original_dataset_order] = torch.load(args.goldpath)
+                golden, input_labels, input_list, model, original_dataset_order = load_data_at_test(
+                    gold_path=args.goldpath)
 
             # Printing timing information
             print_setup_iteration(batch_id=batch_id, comparison_time=comparison_time, copy_to_cpu_time=copy_to_cpu_time,
