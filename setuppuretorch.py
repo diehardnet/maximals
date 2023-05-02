@@ -122,12 +122,13 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
         args.iterations = 1
 
     if args.usetorchcompile is True:
-        version = int(re.match(r"(\d+)\..*", torch.__version__.strip()).group(1))
-        if version < 2:
-            dnn_log_helper.log_and_crash(fatal_string="Torch compile requires Pytorch >=2.0")
-        dev_capability = torch.cuda.get_device_capability()
-        if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY_TORCH_COMPILE:
-            raise ValueError(f"Device cap:{dev_capability[0]} is too old.")
+        raise NotImplementedError("Torch compile is not savable yet.")
+        # version = int(re.match(r"(\d+)\..*", torch.__version__.strip()).group(1))
+        # if version < 2:
+        #     dnn_log_helper.log_and_crash(fatal_string="Torch compile requires Pytorch >=2.0")
+        # dev_capability = torch.cuda.get_device_capability()
+        # if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY_TORCH_COMPILE:
+        #     raise ValueError(f"Device cap:{dev_capability[0]} is too old.")
 
     # Only valid models
     if args.model not in configs.ALL_POSSIBLE_MODELS:
