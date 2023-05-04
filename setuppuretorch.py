@@ -152,6 +152,16 @@ def get_top_k_labels(input_tensor: torch.tensor, top_k: int) -> torch.tensor:
     return torch.topk(probabilities, k=top_k).indices.squeeze(0)
 
 
+def describe_error(input_tensor: torch.tensor) -> Tuple[int, int, float, float]:
+    flattened_tensor = input_tensor.flatten()
+    is_nan_tensor, is_inf_tensor = torch.isnan(flattened_tensor), torch.isinf(flattened_tensor)
+    has_nan, has_inf = int(torch.any(is_nan_tensor)), int(torch.any(is_inf_tensor))
+    filtered_tensor = flattened_tensor[~is_nan_tensor & ~is_inf_tensor]
+    min_val = float(torch.min(filtered_tensor))
+    max_val = float(torch.max(filtered_tensor))
+    return has_nan, has_inf, min_val, max_val
+
+
 def compare_classification(output_tensor: torch.tensor,
                            golden_tensor: torch.tensor,
                            golden_top_k_labels: torch.tensor,
@@ -169,27 +179,25 @@ def compare_classification(output_tensor: torch.tensor,
             # top_k_batch_label_flatten = torch.topk(output_batch, k=top_k).indices.squeeze(0).flatten()
             top_k_batch_label_flatten = get_top_k_labels(input_tensor=output_batch, top_k=top_k).flatten()
             golden_batch_label_flatten = golden_batch_label.flatten()
+            err_string = f"batch:{batch_id} imgid:{img_id} rimgid:{real_img_id} "
             for i, (tpk_gold, tpk_found) in enumerate(zip(golden_batch_label_flatten, top_k_batch_label_flatten)):
                 # Both are integers, and log only if it is feasible
                 if tpk_found != tpk_gold:
                     output_errors += 1
-                    error_detail_ctr = f"batch:{batch_id} critical imgid:{img_id} rimgid:{real_img_id}"
-                    error_detail_ctr += f" i:{i} g:{tpk_gold} o:{tpk_found} gt:{ground_truth_label}"
+                    error_detail_ctr = f"critical {err_string} i:{i} g:{tpk_gold} o:{tpk_found} gt:{ground_truth_label}"
                     if output_logger:
                         output_logger.error(error_detail_ctr)
                     dnn_log_helper.log_error_detail(error_detail_ctr)
 
-            # Not necessary to save everything, only mark the batch
             # ------------ Check error on the whole output -------------------------------------------------------------
-            # for i, (gold, found) in enumerate(zip(golden_batch, output_batch)):
-            #     diff = abs(gold - found)
-            #     if diff > float_threshold and output_errors < configs.MAXIMUM_ERRORS_PER_ITERATION:
-            #         output_errors += 1
-            #         error_detail_out = f"batch:{batch_id} img:{img_id} i:{i} g:{gold:.6e} o:{found:.6e}"
-            #         if output_logger:
-            #             output_logger.error(error_detail_out)
-            #         dnn_log_helper.log_error_detail(error_detail_out)
-            error_detail_out = f"batch:{batch_id} img:{img_id} output and gold differ"
+            # Not necessary to save everything, only the good info
+            # Data on output tensor
+            has_nan, has_inf, min_val, max_val = describe_error(input_tensor=output_batch)
+            error_detail_out = f"{err_string} output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
+            # Data on abs differences
+            abs_diff = torch.abs(torch.subtract(golden_batch, output_batch))
+            has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = describe_error(input_tensor=abs_diff)
+            error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
             output_errors += 1
             if output_logger:
                 output_logger.error(error_detail_out)
@@ -244,7 +252,7 @@ def compare(output_tensor: torch.tensor,
     #     # # Simulate a non-critical error
     #     # output_tensor[3, 0] *= 0.9
     #     # Simulate a critical error
-    #     output_tensor[3, 0] = 39304
+    #     output_tensor[3, 6] = 39304
     #     # Shape SDC
     #     # output_tensor = torch.reshape(output_tensor, (4, 3200))
 
@@ -299,9 +307,7 @@ def check_dnn_accuracy(predicted: Union[Dict[str, List[torch.tensor]], torch.ten
             gt_count += gt.shape[0]
             correct += torch.sum(torch.eq(pred, gt))
     elif dnn_goal == configs.SEGMENTATION:
-        for pred_i, gt in zip(predicted, ground_truth):
-            # TODO: Calculate the IoU here
-            gt_count += len(gt)
+        raise NotImplementedError("Checking segmentation is not implemented")
 
     if output_logger:
         correctness = correct / gt_count

@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import os
+import re
 from typing import Union, Any
 
 import torch
@@ -7,44 +8,43 @@ import torch
 import configure
 
 from setuppuretorch import check_and_setup_gpu
+import setupmicrobenchmarks
+
+_COUNT_OPERATIONS = {}
+_HOOK_ATTENTION_COUNTER = 0
 
 
-def hook_fn(module: torch.nn.Module, module_input: torch.tensor,
-            module_output: torch.tensor) -> Union[torch.tensor, Any]:
-    print(module)
-    print("------------Input Grad------------")
-    for grad in module_input:
-        try:
-            print(grad.shape)
-        except AttributeError:
-            print("None found for Gradient")
+def atomic_operation_hook_fn(module: torch.nn.Module, module_input: torch.tensor,
+                             module_output: torch.tensor) -> Union[torch.tensor, Any]:
+    # TODO: Implement the saving of the microbenchmark code and input/outputs
+    module_name = module.__class__.__name__
+    global _COUNT_OPERATIONS, _HOOK_ATTENTION_COUNTER
+    if module_name in setupmicrobenchmarks.ALL_MICRO_OPS:
+        if module_name not in _COUNT_OPERATIONS:
+            _COUNT_OPERATIONS[module_name] = 0
+        _COUNT_OPERATIONS[module_name] += 1
 
-    print("------------Output Grad------------")
-    for grad in module_output:
-        try:
-            print(grad.shape)
-        except AttributeError:
-            print("None found for Gradient")
-    print("\n")
+    if setupmicrobenchmarks.ATTENTION in module_name:
+        _HOOK_ATTENTION_COUNTER += 1
+        print(module_name)
 
 
-# def hook_fn(m, i, o):
-#   visualisation[m] = o
-#
-# def get_all_layers(net):
-#   for name, layer in net._modules.items():
-#     #If it is a sequential, don't register a hook on it
-#     # but recursively register hook on all it's module children
-#     if isinstance(layer, nn.Sequential):
-#       get_all_layers(layer)
-#     else:
-#       # it's a non-sequential. Register a hook
-#       layer.register_forward_hook(hook_fn)
+def get_all_layers(model: torch.nn.Module) -> int:
+    attentions = 0
+    for name, layer in model.named_modules():
+        if re.match(r'.*\.attn(?:_block|_grid)?$', name):
+            # layer.register_forward_hook(attention_module_hook_fn)
+            attentions += 1
+        layer.register_forward_hook(atomic_operation_hook_fn)
+    return attentions
 
+
+# Force no grad
+@torch.no_grad()
 def main():
     # Check if device is ok and disable grad
     check_and_setup_gpu()
-
+    global _HOOK_ATTENTION_COUNTER
     # Main setup loop
     current_directory = os.getcwd()
     for torch_compile in configure.TORCH_COMPILE_CONFIGS:
@@ -54,11 +54,14 @@ def main():
             gold_path = f"{data_dir}/{configuration_name}.pt"
             print(f"Extracting layers for {configuration_name}")
             [golden, input_list, input_labels, model, original_dataset_order] = torch.load(gold_path)
+            model.zero_grad(set_to_none=True)
             # TODO: Fix hook pass
-            for name, layer in model._modules.items():
-                layer.register_forward_hook(hook_fn)
+            attention_num = get_all_layers(model)
             model(input_list[0])
-
+            print(f"Attention from hooks {_HOOK_ATTENTION_COUNTER} from counter {attention_num}")
+            assert _HOOK_ATTENTION_COUNTER == attention_num
+            _HOOK_ATTENTION_COUNTER = 0
+    print("Total operations\n", "\n".join(f"{k}={v}" for k, v in _COUNT_OPERATIONS.items()))
     print("Finish computation.")
 
 

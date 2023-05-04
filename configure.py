@@ -10,7 +10,8 @@ import torch
 import configs
 
 # It is either false or true
-TORCH_COMPILE_CONFIGS = {False, torch.cuda.get_device_capability()[0] >= 7}
+# FIXME: In the future - now it is not possible to save torch compile models
+TORCH_COMPILE_CONFIGS = {False}  # torch.cuda.get_device_capability()[0] >= 7}
 ALL_DNNS = configs.CNN_CONFIGS
 ALL_DNNS += configs.VIT_CLASSIFICATION_CONFIGS
 

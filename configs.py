@@ -85,6 +85,7 @@ ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS
 # Set the supported goals
 CLASSIFICATION = "classify"
 SEGMENTATION = "segmentation"
+MICROBENCHMARK = "microbenchmark"
 
 DNN_GOAL = {
     # Classification CNNs
@@ -97,7 +98,8 @@ DNN_GOAL = {
 # Error threshold for the test
 DNN_THRESHOLD = {
     CLASSIFICATION: 0.01,
-    SEGMENTATION: 0.01
+    SEGMENTATION: 0.01,
+    MICROBENCHMARK: 0.0
 }
 
 ITERATION_INTERVAL_LOG_HELPER_PRINT = {
