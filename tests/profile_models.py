@@ -10,6 +10,8 @@ import torchinfo
 import timm
 import gc
 
+from setupmicrobenchmarks import ATTENTION
+
 OUTPUT_DATABASE = "../data/profile_layers.csv"
 
 
@@ -39,7 +41,7 @@ def main():
         gc.collect()
         torch.cuda.empty_cache()
         for layer_info in info.summary_list:
-            if layer_info.is_leaf_layer and layer_info.executed:
+            if (layer_info.is_leaf_layer or layer_info.class_name == ATTENTION) and layer_info.executed:
                 data_list.append({
                     "net": model_name, "layer": layer_info.class_name, "layer_params": layer_info.num_params,
                     "depth": layer_info.depth, "output_size": numpy.prod(layer_info.output_size)
