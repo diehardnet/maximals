@@ -27,6 +27,9 @@ SIGMOID = "Sigmoid"
 
 # Composed modules
 ATTENTION = "Attention"
+BLOCK = "Block"
+MLP = "Mlp"
+SWIGLU = "SwiGLU"
 
 ALL_MICRO_OPS = [LINEAR, CONV2D, LAYER_NORM, GELU, RELU, SOFTMAX, SIGMOID, ATTENTION]
 

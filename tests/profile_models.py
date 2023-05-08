@@ -10,8 +10,6 @@ import torchinfo
 import timm
 import gc
 
-from setupmicrobenchmarks import ATTENTION
-
 OUTPUT_DATABASE = "../data/profile_layers.csv"
 
 
@@ -33,18 +31,20 @@ def main():
         config = timm.data.resolve_data_config({}, model=model)
         transform = timm.data.transforms_factory.create_transform(**config)
         out_sample = torch.stack([transform(input_sample_pil)], dim=0).to("cuda:0")
-        info = torchinfo.summary(model=model, input_size=list(out_sample.shape), verbose=torchinfo.Verbosity.VERBOSE)
+        info = torchinfo.summary(model=model, input_size=list(out_sample.shape), verbose=torchinfo.Verbosity.QUIET)
         # Freeing must be in this order
         model.cpu()
+        print(model)
         out_sample.cpu()
         del out_sample, model, transform, config
         gc.collect()
         torch.cuda.empty_cache()
         for layer_info in info.summary_list:
-            if (layer_info.is_leaf_layer or layer_info.class_name == ATTENTION) and layer_info.executed:
+            if layer_info.executed:
                 data_list.append({
-                    "net": model_name, "layer": layer_info.class_name, "layer_params": layer_info.num_params,
-                    "depth": layer_info.depth, "output_size": numpy.prod(layer_info.output_size)
+                    "net": model_name, "layer": layer_info.class_name, "var_name": layer_info.var_name,
+                    "layer_params": layer_info.num_params, "depth": layer_info.depth,
+                    "output_size": numpy.prod(layer_info.output_size)
                 })
 
     df = pd.DataFrame(data_list)
