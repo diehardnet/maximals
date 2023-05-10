@@ -6,7 +6,6 @@ import os.path
 import time
 from pathlib import Path
 from socket import gethostname
-import torch
 import configs
 
 # It is either false or true
