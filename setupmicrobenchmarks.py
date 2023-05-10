@@ -34,58 +34,83 @@ SWIGLU = "SwiGLU"
 ALL_MICRO_OPS = [LINEAR, CONV2D, LAYER_NORM, GELU, RELU, SOFTMAX, SIGMOID, ATTENTION]
 
 # Error geometry
-SINGLE, LINE, SQUARE, RANDOM, CUBIC = range(5)
+SINGLE, LINE, SQUARE, CUBIC, RANDOM, NDIM = "SINGLE", "LINE", "SQUARE", "CUBIC", "RANDOM", "{}-DIM"
 
 
-def geometry_comparison(output_tensor: torch.tensor, golden_tensor: torch.tensor) -> int:
-    # FIXME: This function must be verified
-    diff = torch.eq(output_tensor, golden_tensor).to(dtype=int)
-    count_non_zero_diff = torch.count_nonzero(diff)
-    if count_non_zero_diff == 1:
+def find_geometric_format(lhs: torch.tensor, rhs: torch.tensor) -> str:
+    """
+    Compares two Pytorch tensors of equal dimensions and returns the geometric format of their difference.
+    The function first verifies that the tensors have equal dimensions. Then, it finds the index of the first
+     non-matching element between the two tensors using the Pytorch function torch.nonzero(torch.ne(tensor1, tensor2)).
+     If there is only one non-matching element, the function returns "Single".
+    Next, the function checks if the non-matching elements form a line by verifying that all non-matching elements have
+    the same second and higher dimensions. If so, the function returns "Line".
+    If the non-matching elements form a square, the function verifies that all non-matching elements have the same
+    third and higher dimensions and that the second dimension forms a contiguous block. If so, the function returns
+    "Square".
+    If the non-matching elements form a cube, the function verifies that all non-matching elements have the same
+    fourth and higher dimensions, the second dimension forms a contiguous block, and the third dimension forms a
+    contiguous block. If so, the function returns "Cube".
+    If the non-matching elements are higher-dimensional, the function returns the number of dimensions as
+     "<number>-dimension".
+    If the non-matching elements do not fit any of the above formats, the function returns "Irregular".
+    """
+    assert lhs.shape == rhs.shape, "Tensors must have equal dimensions"
+
+    # Find the index of the first non-matching element
+    index = torch.nonzero(torch.ne(lhs, rhs))
+    # Get the coordinates of the first non-matching element
+    # coords = tuple(index[0].tolist())
+
+    # Check if the difference is a single element
+    if len(index) == 1:
         return SINGLE
-    elif count_non_zero_diff > 1:
-        # Use label function to labelling the matrix
-        where_is_corrupted = torch.argwhere(diff != 0)
 
-        # Get all positions of X and Y
-        all_x_positions = where_is_corrupted[:, 0]
-        all_y_positions = where_is_corrupted[:, 1]
-        all_z_positions = where_is_corrupted[:, 1]
+    # Check if the difference is a line
+    if all(index[:, 1:] == index[0, 1:]):
+        return LINE
 
-        # Count how many times each value is in the list
-        _, counter_x_positions = torch.unique(all_x_positions, return_counts=True)
-        _, counter_y_positions = torch.unique(all_y_positions, return_counts=True)
-        _, counter_z_positions = torch.unique(all_z_positions, return_counts=True)
+    # Check if the difference is a square
+    if all(index[:, 2:] == index[0, 2:]) and all(index[:, 1] == index[:, 0]):
+        return SQUARE
 
-        # Check if any value is in the list more than one time
-        row_error = torch.any(counter_x_positions > 1).flatten()
-        col_error = torch.any(counter_y_positions > 1).flatten()
-        depth_error = torch.any(counter_z_positions > 1).flatten()
+    # Check if the difference is a cube
+    if all(index[:, 3:] == index[0, 3:]) and all(index[:, 1:3] == index[0, 1:3]):
+        return CUBIC
 
-        if row_error and col_error:  # square error
-            return SQUARE
-        elif row_error or col_error:  # row/col error
-            return LINE
-        elif depth_error:  # cubic
-            return CUBIC
-        else:  # Random
-            return RANDOM
+    # Check if the difference is higher-dimensional
+    if len(index[0]) > 4:
+        return NDIM.format(len(index[0]))
+
+    # Difference has no special format
+    return RANDOM
 
 
 def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_threshold: float,
             output_logger: logging.Logger, ) -> int:
     output_errors = 0
+    # Make sure that they are on CPU
+    out_is_cuda, golden_is_cuda = output_tensor.is_cuda, golden_tensor.is_cuda
+    if out_is_cuda or golden_is_cuda:
+        dnn_log_helper.log_and_crash(
+            fatal_string=f"Tensors are not on CPU. OUT IS CUDA:{out_is_cuda} GOLDEN IS CUDA:{golden_is_cuda}")
 
     # First check if the tensors are equal or not
     if equal(rhs=output_tensor, lhs=golden_tensor, threshold=float_threshold) is True:
         return 0
+
+    diff_indices = torch.nonzero(torch.ne(output_tensor, golden_tensor))
+
     # ------------ Check error on the whole output -------------------------------------------------------------
-    for i, (gold, found) in enumerate(zip(output_tensor, golden_tensor)):
-        if abs(gold - found) > float_threshold and output_errors < configs.MAXIMUM_ERRORS_PER_ITERATION:
-            output_errors += 1
-            if output_logger:
-                output_logger.error(f"i:{i} g:{gold:.6e} o:{found:.6e}")
-            dnn_log_helper.log_error_detail(f"i:{i} g:{gold:.6e} o:{found:.6e}")
+    for idx in diff_indices:
+        index = tuple(idx.tolist())
+        found = output_tensor[index].item()
+        gold = golden_tensor[index].item()
+        output_errors += 1
+        error_detail = f"i:{index} g:{gold:.6e} o:{found:.6e}"
+        if output_logger:
+            output_logger.error(error_detail)
+        dnn_log_helper.log_error_detail(error_detail=error_detail)
 
     # Data on output tensor
     has_nan, has_inf, min_val, max_val = describe_error(input_tensor=output_tensor)
@@ -94,6 +119,11 @@ def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_thre
     abs_diff = torch.abs(torch.subtract(golden_tensor, output_tensor))
     has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = describe_error(input_tensor=abs_diff)
     error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
+    dnn_log_helper.log_error_detail(error_detail=error_detail_out)
+    # Log the geometry
+    dnn_log_helper.log_error_detail(
+        f"geometry:{find_geometric_format(lhs=output_tensor, rhs=golden_tensor)}"
+    )
     return output_errors
 
 

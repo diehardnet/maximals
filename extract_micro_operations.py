@@ -1,47 +1,53 @@
 #!/usr/bin/python3
 import os
-import re
 import typing
-
 import pandas as pd
 import torch
-
 import configure
-
 import configs
 
+from setuppuretorch import load_data_at_test
 
-def get_hook_fn(layer_num: str, op_name: str, save_path: str) -> typing.Callable:
+_MICRO_BENCHMARKS_DATA = dict()
+
+
+def get_hook_fn(base_path: str) -> typing.Callable:
     """
     Returns a PyTorch hook function that saves intermediate states of a model
     based on the layer number and operation name.
-
-    Arguments:
-        layer_num: layer number
-        op_name: operation name
-        save_path: file path to save the intermediate states.
-
-    Returns:
-        A PyTorch hook function that saves intermediate states of a model.
     """
 
-    def hook_fn(module: torch.nn.Module, module_input: torch.tensor,
-                module_output: torch.tensor):
-        print(layer_num, op_name, save_path)
-        if module.__class__.__name__ == op_name and module.layer_num == layer_num:
-            module_save = [module_input, module.parameters(), module, module_output]
-            torch.save(module_save, save_path)
+    def hook_fn(module: torch.nn.Module, module_input: torch.tensor, module_output: torch.tensor):
+        global _MICRO_BENCHMARKS_DATA
+        device = "cpu"
+        # print(module_output.shape)
+        # if module.__class__.__name__ == op_name and module.layer_num == layer_num:
+        save_path = f"{base_path}_output_size_{module_output.numel()}.pt"
+        module_input_cpu = (md_input_i.to(device) for md_input_i in module_input)
+        module_output_cpu = (md_output_i.to(device) for md_output_i in module_output)
+
+        _MICRO_BENCHMARKS_DATA[save_path] = [
+            module_input_cpu,
+            # module.to(device),
+            module_output_cpu
+        ]
 
     return hook_fn
 
 
-def get_all_layers(model: torch.nn.Module, layers_to_extract_from_model: pd.DataFrame) -> None:
-    for name, layer in model.named_modules():
+def get_all_layers(model: torch.nn.Module, layers_to_extract_from_model: pd.DataFrame,
+                   micro_benchmarks_dir: str) -> None:
+    layer_types = layers_to_extract_from_model['layer'].to_list()
+    parameter_size = layers_to_extract_from_model['layer_params'].to_list()
+    for layer_id, (name, layer) in enumerate(model.named_modules()):
         # if re.match(r'.*\.attn(?:_block|_grid)?$', name):
         #     # layer.register_forward_hook(attention_module_hook_fn)
         #     attentions += 1 __class__.__name__
-        class_name = layer.__class__.__name__
-        # TODO: Need to select the layers that will be saved
+        class_name = layer.__class__.__name__.strip()
+        pytorch_total_params = sum(p.numel() for p in layer.parameters())
+        op_base_path = f"{micro_benchmarks_dir}/name_{name}_class_name_{class_name}_params_{pytorch_total_params}"
+        if class_name in layer_types and pytorch_total_params in parameter_size:
+            layer.register_forward_hook(get_hook_fn(base_path=op_base_path))
 
 
 def select_layers_to_extract(csv_path: str, models_to_evaluate: list[str]) -> pd.DataFrame:
@@ -68,10 +74,12 @@ def select_layers_to_extract(csv_path: str, models_to_evaluate: list[str]) -> pd
 
 
 @torch.no_grad()
-def generate_micro_operations_files(layers_to_extract: pd.DataFrame, models_to_evaluate: list[str]) -> None:
+def generate_micro_operations_files(layers_to_extract: pd.DataFrame, models_to_evaluate: list[str],
+                                    micro_data_dir: str) -> None:
     print("Extracting the layers")
 
     device = "cuda:0"
+    torch.set_grad_enabled(mode=False)
     # save the selected layers
     current_directory = os.getcwd()
     for torch_compile in configure.TORCH_COMPILE_CONFIGS:
@@ -80,26 +88,43 @@ def generate_micro_operations_files(layers_to_extract: pd.DataFrame, models_to_e
             data_dir = f"{current_directory}/data"
             gold_path = f"{data_dir}/{configuration_name}.pt"
             print(f"Extracting layers for {configuration_name}")
-            [golden, input_list, input_labels, model, original_dataset_order] = torch.load(gold_path)
+            _, _, input_list, model, _ = load_data_at_test(gold_path=gold_path)
             model.zero_grad(set_to_none=True)
             model = model.to(device)
+            model.eval()
             # Select data to extract from specific model
             layers_to_extract_from_model = layers_to_extract[layers_to_extract["net"] == dnn_model]
-            get_all_layers(model=model, layers_to_extract_from_model=layers_to_extract_from_model)
+            # Set the path to save
+            micro_benchmarks_dir = f"{micro_data_dir}/{dnn_model}"
+            os.makedirs(micro_benchmarks_dir, exist_ok=True)
+
+            get_all_layers(model=model, layers_to_extract_from_model=layers_to_extract_from_model,
+                           micro_benchmarks_dir=micro_benchmarks_dir)
             input_cuda = input_list[0].to(device)
             model(input_cuda)
+    # Saving step
+    for path, data in _MICRO_BENCHMARKS_DATA.items():
+        print("Saving", path)
+        torch.save(data, path)
 
 
 # Force no grad
 @torch.no_grad()
 def main():
-    models_to_evaluate = [configs.EVA_LARGE_PATCH14_448_MIM, configs.VIT_HUGE_PATCH14_CLIP_224]
+    micro_data_dir = "data/microbenchmarks"
+
+    models_to_evaluate = [
+        # configs.EVA_BASE_PATCH14_448_MIM,
+        configs.VIT_LARGE_PATCH14_CLIP_224
+    ]
+
     # Select specific layers that are most resource demanding
     layers_to_extract = select_layers_to_extract(csv_path="data/profile_layers.csv",
                                                  models_to_evaluate=models_to_evaluate)
 
     # Generate the layers based on the data
-    generate_micro_operations_files(layers_to_extract=layers_to_extract, models_to_evaluate=models_to_evaluate)
+    generate_micro_operations_files(layers_to_extract=layers_to_extract, models_to_evaluate=models_to_evaluate,
+                                    micro_data_dir=micro_data_dir)
 
 
 if __name__ == '__main__':

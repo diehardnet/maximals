@@ -17,7 +17,7 @@ ALL_DNNS += configs.VIT_CLASSIFICATION_CONFIGS
 
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 USE_TENSORRT = False
 
 TEST_SAMPLES = {
@@ -89,7 +89,7 @@ def configure(download_datasets: bool, download_models: bool):
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
 
 
-def test_all_jsons(timeout=30):
+def test_all_jsons(enable_console_logging, timeout=30):
     hostname = gethostname()
     current_directory = os.getcwd()
     for torch_compile in TORCH_COMPILE_CONFIGS:
@@ -99,8 +99,9 @@ def test_all_jsons(timeout=30):
                 json_data = json.load(fp)
 
             for v in json_data:
-                print("EXECUTING", v["exec"])
-                os.system(v['exec'] + "&")
+                exec_str = v["exec"].replace("--disableconsolelog", "") if enable_console_logging else v["exec"]
+                print("EXECUTING", exec_str)
+                os.system(exec_str + "&")
                 time.sleep(timeout)
                 os.system(v["killcmd"])
 
@@ -169,10 +170,13 @@ def main():
     parser.add_argument('--downloadmodels', default=False, action="store_true", help="Download the models")
     parser.add_argument('--downloaddataset', default=False, action="store_true",
                         help="Set to download the dataset, default is to not download. Needs internet.")
+    parser.add_argument('--enableconsole', default=False, action="store_true",
+                        help="Enable console logging for testing")
+
     args = parser.parse_args()
 
     if args.testjsons != 0:
-        test_all_jsons(timeout=args.testjsons)
+        test_all_jsons(enable_console_logging=args.enableconsole, timeout=args.testjsons)
     else:
         configure(download_datasets=args.downloaddataset, download_models=args.downloadmodels)
 

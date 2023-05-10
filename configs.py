@@ -59,6 +59,13 @@ SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_large_window12to24_192to384
 # https://huggingface.co/timm/eva02_large_patch14_448.mim_m38m_ft_in1k
 EVA_LARGE_PATCH14_448_MIM = "eva02_large_patch14_448.mim_in22k_ft_in22k_in1k"
 EVA_BASE_PATCH14_448_MIM = "eva02_base_patch14_448.mim_in22k_ft_in22k_in1k"
+EVA_SMALL_PATCH14_448_MIN = "eva02_small_patch14_336.mim_in22k_ft_in1k"
+
+# Efficient former
+# https://huggingface.co/timm/efficientformer_l1.snap_dist_in1k
+EFFICIENTFORMER_L1 = "efficientformer_l1.snap_dist_in1k"
+EFFICIENTFORMER_L3 = "efficientformer_l3.snap_dist_in1k"
+EFFICIENTFORMER_L7 = "efficientformer_l7.snap_dist_in1k"
 
 VIT_CLASSIFICATION_CONFIGS = [
     VIT_BASE_PATCH16_224,
@@ -77,7 +84,11 @@ VIT_CLASSIFICATION_CONFIGS = [
     SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K,
     SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K,
     EVA_LARGE_PATCH14_448_MIM,
-    EVA_BASE_PATCH14_448_MIM
+    EVA_BASE_PATCH14_448_MIM,
+    EVA_SMALL_PATCH14_448_MIN,
+    EFFICIENTFORMER_L1,
+    EFFICIENTFORMER_L3,
+    EFFICIENTFORMER_L7
 ]
 
 ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS

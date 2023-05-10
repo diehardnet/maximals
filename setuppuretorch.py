@@ -40,22 +40,35 @@ def load_model(model_name: str, torch_compile: bool) -> [torch.nn.Module, tv_tra
     # First option is the baseline option
     model = timm.create_model(model_name, pretrained=True)
     model.eval()
+    # Disable also parameter grads
+    model.zero_grad(set_to_none=True)
     model = model.to(configs.DEVICE)
     config = timm.data.resolve_data_config({}, model=model)
     transform = timm.data.transforms_factory.create_transform(**config)
-    if torch_compile is True:
-        model = torch.compile(model=model, mode="max-autotune")
-    # Disable also parameter grads
-    model.zero_grad(set_to_none=True)
+    # if torch_compile is True:
+    #     model = torch.compile(model=model, mode="max-autotune")
     return model, transform
 
 
 def load_data_at_test(gold_path: str) -> Tuple:
-    # The order
-    # golden, input_list, input_labels, model, original_dataset_order
+    # gold_model_path = gold_path.replace(".pt", "_traced_model.pt")
+    # The order -> golden, input_list, input_labels, model, original_dataset_order
     [golden, input_list, input_labels, model, original_dataset_order] = torch.load(gold_path)
+    # model = torch.jit.load(gold_model_path)
     model.zero_grad(set_to_none=True)
     return golden, input_labels, input_list, model, original_dataset_order
+
+
+def save_data_at_test(model: torch.nn.Module,
+                      golden: torch.tensor,
+                      input_list: List[torch.tensor],
+                      input_labels: List,
+                      original_dataset_order: List,
+                      gold_path: str) -> None:
+    # gold_model_path = gold_path.replace(".pt", "_traced_model.pt")
+    output_file = [golden, input_list, input_labels, model, original_dataset_order]
+    torch.save(output_file, gold_path)
+    # torch.jit.save(model, gold_model_path)
 
 
 def load_dataset(batch_size: int, dataset: str, test_sample: int,
@@ -395,6 +408,11 @@ def main():
                                                                         test_sample=args.testsamples,
                                                                         transform=transform)
         golden: Dict[str, List[torch.tensor]] = dict(output_list=list(), top_k_labels=list())
+        # # Tracing the model with example input
+        # model = torch.jit.trace(model, input_list[0])
+        # # Invoking torch.jit.freeze
+        # model = torch.jit.freeze(model)
+        # model = torch.jit.script(model)
 
     timer.toc()
     golden_load_diff_time = timer.diff_time_str
@@ -457,8 +475,8 @@ def main():
         setup_iteration += 1
 
     if args.generate is True:
-        output_file = [golden, input_list, input_labels, model, original_dataset_order]
-        torch.save(output_file, args.goldpath)
+        save_data_at_test(model=model, golden=golden, input_list=input_list, input_labels=input_labels,
+                          original_dataset_order=original_dataset_order, gold_path=args.goldpath)
         check_dnn_accuracy(predicted=golden, ground_truth=input_labels, output_logger=terminal_logger,
                            dnn_goal=dnn_goal)
 
