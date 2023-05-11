@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import os
+import re
 import typing
 import pandas as pd
 import torch
@@ -76,7 +77,6 @@ def generate_micro_operations_files(layers_to_extract: pd.DataFrame, models_to_e
     torch.set_grad_enabled(mode=False)
     # save the selected layers
     current_directory = os.getcwd()
-    handlers = list()
     for torch_compile in configure.TORCH_COMPILE_CONFIGS:
         for dnn_model in models_to_evaluate:
             configuration_name = f"{dnn_model}_torch_compile_{torch_compile}"
@@ -96,12 +96,12 @@ def generate_micro_operations_files(layers_to_extract: pd.DataFrame, models_to_e
             handlers = set_hooks_in_the_layers(model=model, layers_to_extract_from_model=layers_to_extract_from_model,
                                                micro_benchmarks_dir=micro_benchmarks_dir)
             input_cuda = input_list[0].to(device)
-            out = model(input_cuda)
+            _ = model(input_cuda)
             torch.cuda.synchronize()
 
-    # Release the handlers
-    for handler in handlers:
-        handler.remove()
+            # Release the handlers
+            for handler in handlers:
+                handler.remove()
     # Save also a list of microbenchmarks
     with open(output_txt_file, "w") as fp:
         # Saving step
@@ -110,6 +110,34 @@ def generate_micro_operations_files(layers_to_extract: pd.DataFrame, models_to_e
             data = _MICRO_BENCHMARKS_DATA[path_tensors] + [_MICRO_MODULES[key_modules]]
             torch.save(data, path_tensors)
             fp.write(path_tensors + "\n")
+
+
+def generate_micro_setup_csv(output_txt_file):
+    data = list()
+    with open(output_txt_file) as fp:
+        for line in fp:
+            basename = line.strip().replace("data/microbenchmarks/", "")
+            pattern = r"(\S+)/id_(\d+)_name_(\S+)_class_(\S+)_params_(\d+)_output_size_(\d+).pt"
+            match = re.match(pattern, basename)
+            data.append(dict(
+                full_path=line.strip(),
+                net=match.group(1),
+                id=match.group(2),
+                name=match.group(3),  # 'blocks'
+                class_name=match.group(4),  # 'LayerNorm'
+                params_num=match.group(5),  # '2048'
+                output_size=match.group(6),  # '1052672'
+            ))
+    df = pd.DataFrame(data)
+    df["params_num"] = df["params_num"].astype(int)
+    df["output_size"] = df["output_size"].astype(int)
+
+    # group the dataframe by 'class_name' and get the index of the row with the highest 'output_size'
+    max_rows = df.groupby(['net', 'class_name'])['output_size'].idxmax()
+
+    # use the index to retrieve the rows with the highest 'output_size' for each group
+    result = df.loc[max_rows]
+    result.to_csv(configure.MICROBENCHMARKS_CSV, index=False)
 
 
 # Force no grad
@@ -130,6 +158,9 @@ def main():
     # Generate the layers based on the data
     generate_micro_operations_files(layers_to_extract=layers_to_extract, models_to_evaluate=models_to_evaluate,
                                     micro_data_dir=micro_data_dir, output_txt_file=output_txt_file)
+
+    # Final step, put everything on csv
+    generate_micro_setup_csv(output_txt_file=output_txt_file)
 
 
 if __name__ == '__main__':

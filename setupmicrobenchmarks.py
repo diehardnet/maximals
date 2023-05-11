@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-import enum
 import logging
 import os
 import torch
@@ -14,24 +13,7 @@ from setuppuretorch import parse_args, Timer, equal, check_and_setup_gpu, print_
 # Best candidates to be evaluated
 # Linear, LayerNorm, Conv2d --> More compute intensive
 # GELU, ReLU, Softmax, Sigmoid --> Less resource demanding activation functions
-# Compute layers
-LINEAR = "Linear"
-CONV2D = "Conv2d"
-LAYER_NORM = "LayerNorm"
-
-# Activation layers
-GELU = "GELU"
-RELU = "ReLU"
-SOFTMAX = "Softmax"
-SIGMOID = "Sigmoid"
-
-# Composed modules
-ATTENTION = "Attention"
-BLOCK = "Block"
-MLP = "Mlp"
-SWIGLU = "SwiGLU"
-
-ALL_MICRO_OPS = [LINEAR, CONV2D, LAYER_NORM, GELU, RELU, SOFTMAX, SIGMOID, ATTENTION]
+# Composed modules: Attention, Block, Mlp, SwiGLU
 
 # Error geometry
 SINGLE, LINE, SQUARE, CUBIC, RANDOM, NDIM = "SINGLE", "LINE", "SQUARE", "CUBIC", "RANDOM", "{}-DIM"
@@ -108,9 +90,10 @@ def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_thre
         gold = golden_tensor[index].item()
         output_errors += 1
         error_detail = f"i:{index} g:{gold:.6e} o:{found:.6e}"
-        if output_logger:
+        if output_logger and output_errors <= 10:
             output_logger.error(error_detail)
-        dnn_log_helper.log_error_detail(error_detail=error_detail)
+        if output_errors < configs.MAXIMUM_ERRORS_PER_ITERATION - 2:  # Minus 2 because the next 2 errors
+            dnn_log_helper.log_error_detail(error_detail=error_detail)
 
     # Data on output tensor
     has_nan, has_inf, min_val, max_val = describe_error(input_tensor=output_tensor)
@@ -120,15 +103,17 @@ def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_thre
     has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = describe_error(input_tensor=abs_diff)
     error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
     dnn_log_helper.log_error_detail(error_detail=error_detail_out)
-    # Log the geometry
-    dnn_log_helper.log_error_detail(
-        f"geometry:{find_geometric_format(lhs=output_tensor, rhs=golden_tensor)}"
-    )
+    # # Log the geometry
+    # dnn_log_helper.log_error_detail(
+    #     f"geometry:{find_geometric_format(lhs=output_tensor, rhs=golden_tensor)}"
+    # )
+    dnn_log_helper.log_error_count(output_errors)
     return output_errors
 
 
-def load_microbenchmark(gold_path: str, micro_name: str) -> Tuple[torch.tensor, torch.tensor, torch.nn.Module]:
+def load_microbenchmark(gold_path: str) -> Tuple[torch.tensor, torch.tensor, torch.nn.Module]:
     input_tensor, output_tensor, forward_call = torch.load(gold_path)
+    output_tensor = output_tensor.to("cpu")
     forward_call.zero_grad(set_to_none=True)
     return input_tensor, output_tensor, forward_call
 
@@ -143,8 +128,7 @@ def main():
                                         torch_version=torch.__version__, timm_version=timm.__version__,
                                         gpu=torch.cuda.get_device_name(), args_conf=args_text_list,
                                         dnn_name=configs.MICROBENCHMARK, activate_logging=not args.generate,
-                                        dnn_goal=args.microtype, dataset="random",
-                                        float_threshold=configs_threshold)
+                                        dnn_goal="", dataset="", float_threshold=configs_threshold)
 
     # Check if device is ok and disable grad
     check_and_setup_gpu()
@@ -157,8 +141,7 @@ def main():
 
     # First step is to load the inputs in the memory
     timer.tic()
-    input_tensor, golden_tensor, forward_call = load_microbenchmark(gold_path=args.goldpath,
-                                                                    micro_name=args.microbenchmark)
+    input_tensor, golden_tensor, forward_call = load_microbenchmark(gold_path=args.goldpath)
     timer.toc()
     if terminal_logger:
         terminal_logger.debug("\n".join(args_text_list))
@@ -170,7 +153,7 @@ def main():
         # Loop over the input list
         timer.tic()
         dnn_log_helper.start_iteration()
-        output_tensor = forward_call(input_tensor=input_tensor)
+        output_tensor = forward_call(input_tensor)
         torch.cuda.synchronize(device=configs.DEVICE)
         dnn_log_helper.end_iteration()
         timer.toc()
@@ -197,11 +180,10 @@ def main():
             del input_tensor
             # Free cuda memory
             torch.cuda.empty_cache()
-            input_tensor, golden_tensor, forward_call = load_microbenchmark(gold_path=args.goldpath,
-                                                                            micro_name=args.microbenchmark)
+            input_tensor, golden_tensor, forward_call = load_microbenchmark(gold_path=args.goldpath)
 
         # Printing timing information
-        print_setup_iteration(batch_id=None, comparison_time=comparison_time, copy_to_cpu_time=copy_to_cpu_time,
+        print_setup_iteration(batch_id=1, comparison_time=comparison_time, copy_to_cpu_time=copy_to_cpu_time,
                               errors=errors, kernel_time=kernel_time, setup_iteration=setup_iteration,
                               terminal_logger=terminal_logger)
         setup_iteration += 1
