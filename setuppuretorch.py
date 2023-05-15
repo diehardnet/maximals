@@ -170,8 +170,8 @@ def describe_error(input_tensor: torch.tensor) -> Tuple[int, int, float, float]:
     is_nan_tensor, is_inf_tensor = torch.isnan(flattened_tensor), torch.isinf(flattened_tensor)
     has_nan, has_inf = int(torch.any(is_nan_tensor)), int(torch.any(is_inf_tensor))
     filtered_tensor = flattened_tensor[~is_nan_tensor & ~is_inf_tensor]
-    min_val = float(torch.min(filtered_tensor))
-    max_val = float(torch.max(filtered_tensor))
+    min_val = float(torch.min(filtered_tensor)) if filtered_tensor.numel() > 0 else 0
+    max_val = float(torch.max(filtered_tensor)) if filtered_tensor.numel() > 0 else 0
     return has_nan, has_inf, min_val, max_val
 
 
