@@ -19,6 +19,13 @@ TORCH_COMPILE_CONFIGS = {False}  # torch.cuda.get_device_capability()[0] >= 7}
 ALL_DNNS = configs.CNN_CONFIGS
 ALL_DNNS += configs.VIT_CLASSIFICATION_CONFIGS
 
+MICRO_CONFIGS = [
+    "id_19_name_blocks.0.mlp_class_Mlp_params_8393728_output_size_1052672.json",
+    "id_7_name_blocks.0_class_Block_params_12596224_output_size_1052672.json",
+    "id_5_name_norm_pre_class_LayerNorm_params_2048_output_size_1052672.json",
+    "id_9_name_blocks.0.attn_class_Attention_params_4198400_output_size_1052672.json"
+]
+
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
 BATCH_SIZE = 4
@@ -148,12 +155,12 @@ def configure_microbenchmarks():
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
 
 
-def test_all_jsons(enable_console_logging, timeout=30):
+def test_all_jsons(enable_console_logging, test_micro, timeout=30):
     hostname = gethostname()
     current_directory = os.getcwd()
-    for torch_compile in TORCH_COMPILE_CONFIGS:
-        for config in ALL_DNNS:
-            file = f"{current_directory}/data/{hostname}_jsons/{config}_torch_compile_{torch_compile}.json"
+    if test_micro is True:
+        for micro_json in MICRO_CONFIGS:
+            file = f"{current_directory}/data/{hostname}_jsons/{micro_json}"
             with open(file, "r") as fp:
                 json_data = json.load(fp)
 
@@ -163,6 +170,19 @@ def test_all_jsons(enable_console_logging, timeout=30):
                 os.system(exec_str + "&")
                 time.sleep(timeout)
                 os.system(v["killcmd"])
+    else:
+        for torch_compile in TORCH_COMPILE_CONFIGS:
+            for config in ALL_DNNS:
+                file = f"{current_directory}/data/{hostname}_jsons/{config}_torch_compile_{torch_compile}.json"
+                with open(file, "r") as fp:
+                    json_data = json.load(fp)
+
+                for v in json_data:
+                    exec_str = v["exec"].replace("--disableconsolelog", "") if enable_console_logging else v["exec"]
+                    print("EXECUTING", exec_str)
+                    os.system(exec_str + "&")
+                    time.sleep(timeout)
+                    os.system(v["killcmd"])
 
 
 def main():
@@ -171,15 +191,15 @@ def main():
                         help="How many seconds to test the jsons, if 0 (default) it does the configure", type=int)
     parser.add_argument('--enableconsole', default=False, action="store_true",
                         help="Enable console logging for testing")
-    parser.add_argument('--generatemicro', default=False, action="store_true",
+    parser.add_argument('--micro', default=False, action="store_true",
                         help="Generate jsons for micro instead of DNNs")
 
     args = parser.parse_args()
 
     if args.testjsons != 0:
-        test_all_jsons(enable_console_logging=args.enableconsole, timeout=args.testjsons)
+        test_all_jsons(enable_console_logging=args.enableconsole, test_micro=args.micro, timeout=args.testjsons)
     else:
-        if args.generatemicro:
+        if args.micro:
             configure_microbenchmarks()
         else:
             configure()

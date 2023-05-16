@@ -1,14 +1,14 @@
 #!/usr/bin/python3
+import functools
 import os
 import re
 import typing
+
 import pandas as pd
 import torch
-import configure
+
 import configs
-
-import functools
-
+import configure
 from setuppuretorch import load_data_at_test
 
 _MICRO_BENCHMARKS_DATA = dict()
@@ -21,7 +21,8 @@ def hook_fn(base_path: str, module: torch.nn.Module, module_input: torch.tensor,
     assert len(module_input) == 1, "Problem on module input, >1"
     _MICRO_BENCHMARKS_DATA[save_path] = [
         module_input[0].clone().detach(),
-        module_output.clone().detach()
+        module_output.clone().detach(),
+        module
     ]
 
 
@@ -107,7 +108,7 @@ def generate_micro_operations_files(layers_to_extract: pd.DataFrame, models_to_e
         # Saving step
         for path_tensors, key_modules in zip(_MICRO_BENCHMARKS_DATA.keys(), _MICRO_MODULES.keys()):
             print("Saving", path_tensors)
-            data = _MICRO_BENCHMARKS_DATA[path_tensors] + [_MICRO_MODULES[key_modules]]
+            data = _MICRO_BENCHMARKS_DATA[path_tensors]  # + [_MICRO_MODULES[key_modules]]
             torch.save(data, path_tensors)
             fp.write(path_tensors + "\n")
 

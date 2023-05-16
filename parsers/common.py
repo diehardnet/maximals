@@ -15,9 +15,13 @@ def search_header(lines: List[str], log) -> Tuple[Union[str, None], Union[int, N
             return m.group(1), int(m.group(2))
 
     for line in lines:
-        m = re.match(r".*config(.+)/(\S+)\.yaml.*", line)
+        m = re.match(r".*config.+/(\S+)\.yaml.*", line)
         if m:
             return m.group(1), -1
+    for line in lines:
+        m = re.match(r"#SERVER_HEADE.*--batchsize (\d+).*--model (\S+) {2}--disableconsolelog", line)
+        if m:
+            return m.group(2), m.group(1)
 
     return None, None
 
@@ -45,7 +49,7 @@ def parse_log_file(log_path: str) -> List[dict]:
             lines = log_fp.readlines()
 
         config, batch_size = search_header(lines=lines, log=log_path)
-        if config is None or batch_size is None:
+        if config is None or batch_size is None or config == "urations":
             raise ValueError(f"Problem on parsing header {log_path}")
         data_dict = dict(start_dt=start_dt, config=config, ecc=ecc, hostname=hostname,
                          logfile=os.path.basename(log_path), batch_size=batch_size)
