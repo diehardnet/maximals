@@ -108,9 +108,9 @@ DNN_GOAL = {
 
 # Error threshold for the test
 DNN_THRESHOLD = {
-    CLASSIFICATION: 0.01,
-    SEGMENTATION: 0.01,
-    MICROBENCHMARK: 0.01,
+    CLASSIFICATION: 1.0e-3,
+    SEGMENTATION: 1.0e-3,
+    MICROBENCHMARK: 1.0e-3,
 }
 
 ITERATION_INTERVAL_LOG_HELPER_PRINT = {
@@ -118,7 +118,7 @@ ITERATION_INTERVAL_LOG_HELPER_PRINT = {
     **{k: 10 for k in CNN_CONFIGS},
     **{k: 10 for k in VIT_CLASSIFICATION_CONFIGS},
     # Segmentation nets, huge
-    MICROBENCHMARK: 30
+    MICROBENCHMARK: 100
 }
 
 # This max size will determine the max number of images in all datasets
