@@ -10,6 +10,11 @@ def search_header(lines: List[str], log) -> Tuple[Union[str, None], Union[int, N
         m = re.match(r".*config=.+/(\S+)\.yaml.*batch_size=(\d+).*", line)
         if m:
             return m.group(1), int(m.group(2))
+
+        m = re.match(r"#HEADER.*dataset: iterations=.*goldpath=.+/(\S+).pt .*usetorchcompile=False", line)
+        if m:
+            return m.group(1), 1
+
         m = re.match(r"#HEADER.*model=(\S+) batchsize=(\d+).*", line)
         if m:
             return m.group(1), int(m.group(2))

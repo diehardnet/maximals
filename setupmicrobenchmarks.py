@@ -1,13 +1,14 @@
 #!/usr/bin/python3
 import logging
 import os
-import torch
+from typing import Tuple
+
 import timm
+import torch
+
 import configs
 import console_logger
 import dnn_log_helper
-from typing import Tuple
-
 from setuppuretorch import parse_args, Timer, equal, check_and_setup_gpu, print_setup_iteration, describe_error
 
 # Best candidates to be evaluated
@@ -37,8 +38,6 @@ def find_geometric_format(lhs: torch.tensor, rhs: torch.tensor) -> str:
      "<number>-dimension".
     If the non-matching elements do not fit any of the above formats, the function returns "Irregular".
     """
-    assert lhs.shape == rhs.shape, "Tensors must have equal dimensions"
-
     # Find the index of the first non-matching element
     index = torch.nonzero(torch.ne(lhs, rhs))
     # Get the coordinates of the first non-matching element
@@ -69,7 +68,7 @@ def find_geometric_format(lhs: torch.tensor, rhs: torch.tensor) -> str:
 
 
 def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_threshold: float,
-            output_logger: logging.Logger, ) -> int:
+            output_logger: logging.Logger, iteration: int) -> int:
     output_errors = 0
     # Make sure that they are on CPU
     out_is_cuda, golden_is_cuda = output_tensor.is_cuda, golden_tensor.is_cuda
@@ -108,6 +107,9 @@ def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_thre
     #     f"geometry:{find_geometric_format(lhs=output_tensor, rhs=golden_tensor)}"
     # )
     dnn_log_helper.log_error_count(output_errors)
+    # Dump the file
+    save_file = dnn_log_helper.log_file_name.replace(".log", f"sdcit_{iteration}.pt")
+    torch.save(output_tensor, save_file)
     return output_errors
 
 
@@ -168,7 +170,8 @@ def main():
         errors = 0
         if args.generate is False:
             errors = compare(output_tensor=output_tensor_cpu, golden_tensor=golden_tensor,
-                             float_threshold=configs_threshold, output_logger=terminal_logger)
+                             float_threshold=configs_threshold, output_logger=terminal_logger,
+                             iteration=setup_iteration)
 
         timer.toc()
         comparison_time = timer.diff_time
