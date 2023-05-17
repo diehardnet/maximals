@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import logging
 import os
+import re
 from typing import Tuple
 
 import timm
@@ -106,10 +107,11 @@ def compare(output_tensor: torch.tensor, golden_tensor: torch.tensor, float_thre
     # dnn_log_helper.log_error_detail(
     #     f"geometry:{find_geometric_format(lhs=output_tensor, rhs=golden_tensor)}"
     # )
-    dnn_log_helper.log_error_count(output_errors)
     # Dump the file
-    save_file = dnn_log_helper.log_file_name.replace(".log", f"sdcit_{iteration}.pt")
+    log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+    save_file = f"{log_helper_file}_sdcit_{iteration}.pt"
     torch.save(output_tensor, save_file)
+    dnn_log_helper.log_error_count(output_errors)
     return output_errors
 
 
