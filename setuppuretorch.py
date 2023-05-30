@@ -73,6 +73,7 @@ def save_data_at_test(model: torch.nn.Module,
 
 def load_dataset(batch_size: int, dataset: str, test_sample: int,
                  transform: tv_transforms.Compose) -> Tuple[List, List, range]:
+    # FIXME: correct the loading approach, the sequential sampler does not do what it is expected
     original_order = range(0, configs.DATASET_MAX_SIZE, int(configs.DATASET_MAX_SIZE / test_sample))
     subset = torch.utils.data.SequentialSampler(original_order)
     input_dataset, input_labels = list(), list()
