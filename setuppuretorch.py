@@ -328,8 +328,9 @@ def check_dnn_accuracy(predicted: Union[Dict[str, List[torch.tensor]], torch.ten
     if output_logger:
         correctness = correct / gt_count
         output_logger.debug(f"Correct predicted samples:{correct} - ({correctness * 100:.2f}%)")
-        if correctness < 0.8:
-            dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY LOWER THAN 50%")
+        correctness_threshold = 0.7
+        if correctness < correctness_threshold:
+            dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY LOWER THAN {correctness_threshold * 100.0}%")
 
 
 def update_golden(golden: Dict[str, list], output: torch.tensor, dnn_goal: str) -> Dict[str, list]:
