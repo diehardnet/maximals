@@ -10,8 +10,8 @@ from typing import Tuple, List, Dict, Union
 
 import timm
 import torch
-from torchvision import transforms as tv_transforms
 from torchvision import datasets as tv_datasets
+from torchvision import transforms as tv_transforms
 
 import configs
 import console_logger
@@ -72,39 +72,41 @@ def save_data_at_test(model: torch.nn.Module,
 
 
 def load_dataset(batch_size: int, dataset: str, test_sample: int,
-                 transform: tv_transforms.Compose) -> Tuple[List, List, range]:
-    # FIXME: correct the loading approach, the sequential sampler does not do what it is expected
-    original_order = range(0, configs.DATASET_MAX_SIZE, int(configs.DATASET_MAX_SIZE / test_sample))
-    subset = torch.utils.data.SequentialSampler(original_order)
-    input_dataset, input_labels = list(), list()
-
+                 transform: tv_transforms.Compose) -> Tuple[List, List, List]:
+    # Using sequential sampler is the same as passing the shuffle=False
+    # Using the RandomSampler with a fixed seed is better
+    input_dataset, input_labels, original_order = list(), list(), list()
+    sampler_generator = torch.Generator(device="cpu")
+    sampler_generator.manual_seed(configs.SAMPLER_SEED)
+    test_set = None
     if dataset == configs.IMAGENET:
         test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=transform,
                                                  split='val')
-        # noinspection PyUnresolvedReferences
-        test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=batch_size,
-                                                  shuffle=False, pin_memory=True)
-        for inputs, labels in test_loader:
-            # Only the inputs must be in the device
-            input_dataset.append(inputs.to(configs.DEVICE))
-            input_labels.append(labels)
     elif dataset == configs.COCO:
         # This is only used when performing det/seg and these models already perform transforms
         test_set = tv_datasets.coco.CocoDetection(root=configs.COCO_DATASET_VAL,
                                                   annFile=configs.COCO_DATASET_ANNOTATIONS,
                                                   transform=transform)
-        # noinspection PyUnresolvedReferences
-        test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=batch_size,
-                                                  shuffle=False, pin_memory=True, collate_fn=lambda x: x)
-        for iterator in test_loader:
-            inputs, labels = list(), list()
-            for input_i, label_i in iterator:
-                inputs.append(input_i)
-                labels.append(label_i)
-            # Only the inputs must be in the device
-            input_dataset.append(torch.stack(inputs).to(configs.DEVICE))
-            # Labels keys dict_keys(['segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id'])
-            input_labels.append(labels)
+        # test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=batch_size,
+        #                                           shuffle=False, pin_memory=True, collate_fn=lambda x: x)
+        # for iterator in test_loader:
+        #     inputs, labels = list(), list()
+        #     for input_i, label_i in iterator:
+        #         inputs.append(input_i)
+        #         labels.append(label_i)
+        #     # Only the inputs must be in the device
+        #     input_dataset.append(torch.stack(inputs).to(configs.DEVICE))
+        #     # Labels keys dict_keys(['segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id'])
+        #     input_labels.append(labels)
+
+    subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=test_sample,
+                                            generator=sampler_generator)
+    test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=batch_size,
+                                              shuffle=False, pin_memory=True)
+    for inputs, labels in test_loader:
+        # Only the inputs must be in the device
+        input_dataset.append(inputs.to(configs.DEVICE))
+        input_labels.append(labels)
 
     return input_dataset, input_labels, original_order
 

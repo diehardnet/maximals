@@ -145,3 +145,6 @@ TMP_CRASH_FILE = "/tmp/maximal_crash_file.txt"
 
 # TensorRT file pattern
 TENSORRT_FILE_POSFIX = "_tensorrt.ts"
+
+# Seed used for sampling
+SAMPLER_SEED = 2147483647
