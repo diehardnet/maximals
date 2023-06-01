@@ -1,6 +1,6 @@
+# Maximum Malicious valueS
 
-# Hardened Transformers
-Maximals is a group of Transformers hardened for reliability and security. 
+MaxiMalS is a group of Transformers hardened for reliability and security.
 
 # Getting started
 
