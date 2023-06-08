@@ -16,6 +16,7 @@ from torchvision import transforms as tv_transforms
 import configs
 import console_logger
 import dnn_log_helper
+import hardened_identity
 
 
 class Timer:
@@ -36,10 +37,27 @@ class Timer:
     def __repr__(self): return str(self)
 
 
+def replace_identity(module, name):
+    """Recursively put desired module in nn.module module.
+    """
+    # go through all attributes of module nn.module (e.g. network or layer) and put batch norms if present
+    for attr_str in dir(module):
+        target_attr = getattr(module, attr_str)
+        if type(target_attr) == torch.nn.BatchNorm2d:
+            print('replaced: ', name, attr_str)
+            new_identity = hardened_identity.HardenedIdentity()
+            setattr(module, attr_str, new_identity)
+
+    # iterate through immediate child modules. Note, the recursion is done by our code no need to use named_modules()
+    for name, immediate_child_module in module.named_children():
+        replace_identity(immediate_child_module, name)
+
+
 def load_model(model_name: str, torch_compile: bool) -> [torch.nn.Module, tv_transforms.Compose]:
     # First option is the baseline option
     model = timm.create_model(model_name, pretrained=True)
     model.eval()
+    replace_identity(model, "model")
     # Disable also parameter grads
     model.zero_grad(set_to_none=True)
     model = model.to(configs.DEVICE)
