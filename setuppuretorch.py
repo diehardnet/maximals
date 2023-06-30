@@ -57,7 +57,7 @@ def load_model(model_name: str, torch_compile: bool) -> [torch.nn.Module, tv_tra
     # First option is the baseline option
     model = timm.create_model(model_name, pretrained=True)
     model.eval()
-    replace_identity(model, "model")
+    # replace_identity(model, "model")
     # Disable also parameter grads
     model.zero_grad(set_to_none=True)
     model = model.to(configs.DEVICE)
