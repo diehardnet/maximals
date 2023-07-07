@@ -48,13 +48,13 @@ def replace_identity(module, name):
             new_identity = hardened_identity.HardenedIdentity()
             setattr(module, attr_str, new_identity)
 
-    # iterate through immediate child modules. Note, the recursion is done by our code no need to use named_modules()
+    # Iterate through immediate child modules. Note, our code does the recursion no need to use named_modules()
     for name, immediate_child_module in module.named_children():
         replace_identity(immediate_child_module, name)
 
 
 def load_model(model_name: str, torch_compile: bool) -> [torch.nn.Module, tv_transforms.Compose]:
-    # First option is the baseline option
+    # The First option is the baseline option
     model = timm.create_model(model_name, pretrained=True)
     model.eval()
     # replace_identity(model, "model")
@@ -373,7 +373,7 @@ def copy_output_to_cpu(dnn_output: Union[torch.tensor, collections.OrderedDict],
 
 
 def check_and_setup_gpu() -> None:
-    # Disable all torch grad
+    # Disable all torch grads
     torch.set_grad_enabled(mode=False)
     if torch.cuda.is_available() is False:
         dnn_log_helper.log_and_crash(fatal_string=f"Device {configs.DEVICE} not available.")
@@ -407,7 +407,7 @@ def main():
                                         activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
                                         float_threshold=float_threshold)
 
-    # Check if device is ok and disable grad
+    # Check if a device is ok and disable grad
     check_and_setup_gpu()
 
     # Defining a timer
@@ -423,7 +423,7 @@ def main():
         # Save everything in the same list
         golden, input_labels, input_list, model, original_dataset_order = load_data_at_test(gold_path=args.goldpath)
     else:
-        # First step is to load the inputs in the memory
+        # The First step is to load the inputs in the memory
         # Load the model
         model, transform = load_model(model_name=args.model, torch_compile=args.usetorchcompile)
         input_list, input_labels, original_dataset_order = load_dataset(batch_size=args.batchsize, dataset=dataset,
