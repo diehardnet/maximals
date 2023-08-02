@@ -4,7 +4,10 @@ import timm
 import torch
 from torchvision import datasets as tv_datasets
 
+MAXVIT_LARGE_TF_384 = 'maxvit_large_tf_384.in21k_ft_in1k'
+MAXVIT_LARGE_TF_512 = 'maxvit_large_tf_512.in21k_ft_in1k'
 VIT_LARGE_PATCH14_CLIP_224 = "vit_large_patch14_clip_224.laion2b_ft_in12k_in1k"
+SELECTED_MODEL = MAXVIT_LARGE_TF_512
 # Values for VIT_LARGE_PATCH14_CLIP_224
 # MAX Value found:124.64655303955078 - MIN Value found:-231.63162231445312 - BATCH SIZE 250
 # MAX Value found:124.64654541015625 - MIN Value found:-231.63150024414062 - BATCH SIZE 1
@@ -54,8 +57,8 @@ def main():
         raise ValueError(f"Device {DEVICE} not available.")
 
     print("Creating model")
-    model = timm.create_model(VIT_LARGE_PATCH14_CLIP_224, pretrained=True)
-    replace_identity(module=model, name=VIT_LARGE_PATCH14_CLIP_224)
+    model = timm.create_model(SELECTED_MODEL, pretrained=True)
+    replace_identity(module=model, name=SELECTED_MODEL)
     model.eval()
     # replace_identity(model, "model")
     # Disable also parameter grads
