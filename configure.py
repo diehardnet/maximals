@@ -17,7 +17,9 @@ MICROBENCHMARKS_CSV = "/home/carol/maximals/data/microbenchmarks/to_evaluate_mic
 # FIXME: In the future - now it is not possible to save torch compile models
 TORCH_COMPILE_CONFIGS = {False}  # torch.cuda.get_device_capability()[0] >= 7}
 HARDENING_TYPES = {None, "hardenedid"}
-ALL_DNNS = configs.CNN_CONFIGS
+# don't mess with pointers (this is to avoid changing the original lists)
+ALL_DNNS = list()
+ALL_DNNS += configs.CNN_CONFIGS
 ALL_DNNS += configs.VIT_CLASSIFICATION_CONFIGS
 
 MICRO_CONFIGS = [
@@ -65,7 +67,9 @@ def configure():
     for torch_compile in TORCH_COMPILE_CONFIGS:
         for hardening in HARDENING_TYPES:
             for dnn_model in ALL_DNNS:
-                configuration_name = f"{dnn_model}_torch_compile_{torch_compile}_{hardening}"
+                if dnn_model in configs.CNN_CONFIGS and hardening is not None:
+                    continue
+                configuration_name = f"{dnn_model}_torch_compile_{torch_compile}_hardening_{hardening}"
                 json_file_name = f"{jsons_path}/{configuration_name}.json"
                 data_dir = f"{current_directory}/data"
                 gold_path = f"{data_dir}/{configuration_name}.pt"
@@ -78,7 +82,7 @@ def configure():
                     f"--checkpointdir {checkpoint_dir}",
                     f"--goldpath {gold_path}",
                     f"--model {dnn_model}",
-                    f"--usetorchcompile" if torch_compile is True else ''
+                    f"--usetorchcompile" if torch_compile is True else '',
                     f"--{hardening}" if hardening else ''
                 ]
 
@@ -175,17 +179,21 @@ def test_all_jsons(enable_console_logging, test_micro, timeout=30):
                 os.system(v["killcmd"])
     else:
         for torch_compile in TORCH_COMPILE_CONFIGS:
-            for config in ALL_DNNS:
-                file = f"{current_directory}/data/{hostname}_jsons/{config}_torch_compile_{torch_compile}.json"
-                with open(file, "r") as fp:
-                    json_data = json.load(fp)
+            for hardening in HARDENING_TYPES:
+                for dnn_model in ALL_DNNS:
+                    if dnn_model in configs.CNN_CONFIGS and hardening is not None:
+                        continue
+                    file = f"{current_directory}/data/{hostname}_jsons"
+                    file += f"/{dnn_model}_torch_compile_{torch_compile}_hardening_{hardening}.json"
+                    with open(file, "r") as fp:
+                        json_data = json.load(fp)
 
-                for v in json_data:
-                    exec_str = v["exec"].replace("--disableconsolelog", "") if enable_console_logging else v["exec"]
-                    print("EXECUTING", exec_str)
-                    os.system(exec_str + "&")
-                    time.sleep(timeout)
-                    os.system(v["killcmd"])
+                    for v in json_data:
+                        exec_str = v["exec"].replace("--disableconsolelog", "") if enable_console_logging else v["exec"]
+                        print("EXECUTING", exec_str)
+                        os.system(exec_str + "&")
+                        time.sleep(timeout)
+                        os.system(v["killcmd"])
 
 
 def main():
