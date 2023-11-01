@@ -16,6 +16,7 @@ MICROBENCHMARKS_CSV = "/home/carol/maximals/data/microbenchmarks/to_evaluate_mic
 # It is either false or true
 # FIXME: In the future - now it is not possible to save torch compile models
 TORCH_COMPILE_CONFIGS = {False}  # torch.cuda.get_device_capability()[0] >= 7}
+HARDENING_TYPES = {None, "hardenedid"}
 ALL_DNNS = configs.CNN_CONFIGS
 ALL_DNNS += configs.VIT_CLASSIFICATION_CONFIGS
 
@@ -62,38 +63,40 @@ def configure():
 
     script_name = "setuppuretorch.py"
     for torch_compile in TORCH_COMPILE_CONFIGS:
-        for dnn_model in ALL_DNNS:
-            configuration_name = f"{dnn_model}_torch_compile_{torch_compile}"
-            json_file_name = f"{jsons_path}/{configuration_name}.json"
-            data_dir = f"{current_directory}/data"
-            gold_path = f"{data_dir}/{configuration_name}.pt"
-            checkpoint_dir = f"{data_dir}/checkpoints"
-            parameters = [
-                f"{current_directory}/{script_name}",
-                f"--iterations {ITERATIONS}",
-                f"--testsamples {TEST_SAMPLES[dnn_model]}",
-                f"--batchsize {BATCH_SIZE}",
-                f"--checkpointdir {checkpoint_dir}",
-                f"--goldpath {gold_path}",
-                f"--model {dnn_model}",
-                f"--usetorchcompile" if torch_compile is True else ''
-            ]
+        for hardening in HARDENING_TYPES:
+            for dnn_model in ALL_DNNS:
+                configuration_name = f"{dnn_model}_torch_compile_{torch_compile}_{hardening}"
+                json_file_name = f"{jsons_path}/{configuration_name}.json"
+                data_dir = f"{current_directory}/data"
+                gold_path = f"{data_dir}/{configuration_name}.pt"
+                checkpoint_dir = f"{data_dir}/checkpoints"
+                parameters = [
+                    f"{current_directory}/{script_name}",
+                    f"--iterations {ITERATIONS}",
+                    f"--testsamples {TEST_SAMPLES[dnn_model]}",
+                    f"--batchsize {BATCH_SIZE}",
+                    f"--checkpointdir {checkpoint_dir}",
+                    f"--goldpath {gold_path}",
+                    f"--model {dnn_model}",
+                    f"--usetorchcompile" if torch_compile is True else ''
+                    f"--{hardening}" if hardening else ''
+                ]
 
-            execute_parameters = parameters + ["--disableconsolelog"]
-            command_list = [{
-                "killcmd": f"pkill -9 -f {script_name}",
-                "exec": " ".join(execute_parameters),
-                "codename": dnn_model,
-                "header": " ".join(execute_parameters)
-            }]
+                execute_parameters = parameters + ["--disableconsolelog"]
+                command_list = [{
+                    "killcmd": f"pkill -9 -f {script_name}",
+                    "exec": " ".join(execute_parameters),
+                    "codename": dnn_model,
+                    "header": " ".join(execute_parameters)
+                }]
 
-            generate_cmd = " ".join(parameters + ["--generate"])
-            # dump json
-            with open(json_file_name, "w") as json_fp:
-                json.dump(obj=command_list, fp=json_fp, indent=4)
+                generate_cmd = " ".join(parameters + ["--generate"])
+                # dump json
+                with open(json_file_name, "w") as json_fp:
+                    json.dump(obj=command_list, fp=json_fp, indent=4)
 
-            print(f"Executing generate for {generate_cmd}")
-            execute_cmd(generate_cmd)
+                print(f"Executing generate for {generate_cmd}")
+                execute_cmd(generate_cmd)
 
     print("Json creation and golden generation finished")
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")

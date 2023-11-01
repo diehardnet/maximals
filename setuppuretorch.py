@@ -37,34 +37,37 @@ class Timer:
     def __repr__(self): return str(self)
 
 
-def replace_identity(module, name):
+def replace_identity(module: torch.nn.Module, model_name: str):
     """Recursively put desired module in nn.module module.
     """
-    # go through all attributes of module nn.module (e.g. network or layer) and put batch norms if present
+    # go through all attributes of module nn.module (e.g., network or layer) and put batch norms if present
     for attr_str in dir(module):
         target_attr = getattr(module, attr_str)
-        if type(target_attr) == torch.nn.BatchNorm2d:
-            print('replaced: ', name, attr_str)
-            new_identity = hardened_identity.HardenedIdentity()
+        if type(target_attr) == torch.nn.Identity:
+            new_identity = hardened_identity.HardenedIdentity(model_name=model_name)
             setattr(module, attr_str, new_identity)
 
     # Iterate through immediate child modules. Note, our code does the recursion no need to use named_modules()
-    for name, immediate_child_module in module.named_children():
-        replace_identity(immediate_child_module, name)
+    for _, immediate_child_module in module.named_children():
+        replace_identity(module=immediate_child_module, model_name=model_name)
 
 
-def load_model(model_name: str, torch_compile: bool) -> [torch.nn.Module, tv_transforms.Compose]:
+def load_model(model_name: str, hardened_model: bool, torch_compile: bool) -> [torch.nn.Module, tv_transforms.Compose]:
     # The First option is the baseline option
     model = timm.create_model(model_name, pretrained=True)
     model.eval()
-    # replace_identity(model, "model")
+    if hardened_model:
+        replace_identity(module=model, model_name=model_name)
     # Disable also parameter grads
     model.zero_grad(set_to_none=True)
     model = model.to(configs.DEVICE)
     config = timm.data.resolve_data_config({}, model=model)
     transform = timm.data.transforms_factory.create_transform(**config)
-    # if torch_compile is True:
-    #     model = torch.compile(model=model, mode="max-autotune")
+    # TODO: Implement when the serialization is possible
+    if torch_compile is True:
+        # model = torch.compile(model=model, mode="max-autotune")
+        dnn_log_helper.log_and_crash(fatal_string="Up to now it's not possible to serialize compiled models "
+                                                  "(github.com/pytorch/pytorch/issues/101107#issuecomment-1542688089)")
     return model, transform
 
 
@@ -145,7 +148,9 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
     parser.add_argument('--batchsize', type=int, help="Batch size to be used.", default=1)
     # Only for pytorch 2.0
     parser.add_argument('--usetorchcompile', default=False, action="store_true",
-                        help="Disable or enable torch compile (GPU Arch >= 700")
+                        help="Disable or enable torch compile (GPU Arch >= 700)")
+    parser.add_argument('--hardenedid', default=False, action="store_true",
+                        help="Disable or enable HardenedIdentity. Work only for the profiled models.")
     args = parser.parse_args()
 
     if args.testsamples % args.batchsize != 0:
@@ -156,13 +161,7 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
         args.iterations = 1
 
     if args.usetorchcompile is True:
-        raise NotImplementedError("Torch compile is not savable yet.")
-        # version = int(re.match(r"(\d+)\..*", torch.__version__.strip()).group(1))
-        # if version < 2:
-        #     dnn_log_helper.log_and_crash(fatal_string="Torch compile requires Pytorch >=2.0")
-        # dev_capability = torch.cuda.get_device_capability()
-        # if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY_TORCH_COMPILE:
-        #     raise ValueError(f"Device cap:{dev_capability[0]} is too old.")
+        dnn_log_helper.log_and_crash(fatal_string="Torch compile is not savable yet.")
 
     # Only valid models
     if args.model not in configs.ALL_POSSIBLE_MODELS:
@@ -172,10 +171,18 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
     return args, args_text_list
 
 
-def equal(rhs: torch.Tensor, lhs: torch.Tensor, threshold: float = 0) -> bool:
-    """ Compare based or not in a threshold, if threshold is none then it is equal comparison    """
-    if threshold > 0:
-        return bool(torch.all(torch.le(torch.abs(torch.subtract(rhs, lhs)), threshold)))
+def equal(rhs: torch.Tensor, lhs: torch.Tensor, threshold: Union[None, float]) -> bool:
+    """ Compare based or not in a threshold, if the threshold is none then it is equal comparison    """
+    if threshold is not None:
+        return bool(
+            torch.all(
+                torch.le(
+                    torch.abs(
+                        torch.subtract(rhs, lhs)
+                    ), threshold
+                )
+            )
+        )
     else:
         return bool(torch.equal(rhs, lhs))
 
@@ -278,7 +285,7 @@ def compare(output_tensor: torch.tensor,
             ground_truth_labels: Union[List[torch.tensor], List[dict]],
             batch_id: int,
             output_logger: logging.Logger, dnn_goal: str, setup_iteration: int, float_threshold: float,
-            original_dataset_order: range):
+            original_dataset_order: range) -> int:
     golden_tensor = golden["output_list"][batch_id]
     # global TEST
     # TEST += 1
@@ -341,7 +348,7 @@ def check_dnn_accuracy(predicted: Union[Dict[str, List[torch.tensor]], torch.ten
             gt_count += gt.shape[0]
             correct += torch.sum(torch.eq(pred, gt))
     elif dnn_goal == configs.SEGMENTATION:
-        raise NotImplementedError("Checking segmentation is not implemented")
+        dnn_log_helper.log_and_crash(fatal_string="Checking segmentation is not implemented")
 
     if output_logger:
         correctness = correct / gt_count
@@ -425,7 +432,8 @@ def main():
     else:
         # The First step is to load the inputs in the memory
         # Load the model
-        model, transform = load_model(model_name=args.model, torch_compile=args.usetorchcompile)
+        model, transform = load_model(model_name=args.model, hardened_model=args.hardenedid,
+                                      torch_compile=args.usetorchcompile)
         input_list, input_labels, original_dataset_order = load_dataset(batch_size=args.batchsize, dataset=dataset,
                                                                         test_sample=args.testsamples,
                                                                         transform=transform)
