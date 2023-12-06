@@ -212,15 +212,15 @@ def compare_classification(output_tensor: torch.tensor,
                            output_logger: logging.Logger, float_threshold: float, original_dataset_order: range) -> int:
     output_errors = 0
     # Iterate over the batches
-    for img_id, (real_img_id, output_batch, golden_batch, golden_batch_label, ground_truth_label) in enumerate(
-            zip(original_dataset_order, output_tensor, golden_tensor, golden_top_k_labels, ground_truth_labels)):
+    for img_id, (output_batch, golden_batch, golden_batch_label, ground_truth_label) in enumerate(
+            zip(output_tensor, golden_tensor, golden_top_k_labels, ground_truth_labels)):
         # using the same approach as the detection, compare only the positions that differ
         if equal(rhs=golden_batch, lhs=output_batch, threshold=float_threshold) is False:
             # ------------ Check if there is a Critical error ----------------------------------------------------------
             # top_k_batch_label_flatten = torch.topk(output_batch, k=top_k).indices.squeeze(0).flatten()
             top_k_batch_label_flatten = get_top_k_labels(input_tensor=output_batch, top_k=top_k).flatten()
             golden_batch_label_flatten = golden_batch_label.flatten()
-            err_string = f"batch:{batch_id} imgid:{img_id} rimgid:{real_img_id} "
+            err_string = f"batch:{batch_id} imgid:{img_id} "
             for i, (tpk_gold, tpk_found) in enumerate(zip(golden_batch_label_flatten, top_k_batch_label_flatten)):
                 # Both are integers, and log only if it is feasible
                 if tpk_found != tpk_gold:
