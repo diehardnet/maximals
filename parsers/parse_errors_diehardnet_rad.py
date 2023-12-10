@@ -22,7 +22,7 @@ def main():
     args = parse_args()
     data_list = list()
     for subdir, dirs, files in os.walk(args.logdir):
-        if any([i in subdir for i in ["carolp", "carolm", "carola"]]):
+        if any([i in subdir for i in ["carolp20002"]]):
             print("Parsing", subdir)
             for file in files:
                 path = os.path.join(subdir, file)
