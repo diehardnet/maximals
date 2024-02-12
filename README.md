@@ -1,6 +1,6 @@
-# Maximum Malicious valueS
+# Maximum corrupted Malicious values (MaxiMals)
 
-MaxiMalS is a set of Transformers hardened for reliability.
+MaxiMals is a set of Transformers hardened for reliability.
 
 # Getting started
 
@@ -8,9 +8,25 @@ MaxiMalS is a set of Transformers hardened for reliability.
 First, you have to have the following requirements:
 
 - Python 3.10
-- Python Pip
-- [libLogHelper](https://github.com/radhelper/libLogHelper)
-- ImageNet dataset
+- Python pip
+- [ImageNet dataset](https://www.image-net.org/index.php)
+
+### Reliability evaluation requirements
+
+For the fault simulations and beam experiments:
+
+- For the beam experiments, you will need the scripts from [radhelper](https://github.com/radhelper) repositories 
+to control the boards inside the beamline
+  - You must have [libLogHelper](https://github.com/radhelper/libLogHelper) 
+  installed on the host that controls the GPU and a socket server set up outside the beam room. 
+  You can use [radiation-setup](https://github.com/radhelper/radiation-setup) as a socket server.
+- For fault simulations, you can use the official version of 
+[NVIDIA Bit Fault Injector](https://github.com/NVlabs/nvbitfi) (works until Volta micro-architecture) or 
+the version
+  we updated for [Ampere evaluations](https://github.com/fernandoFernandeSantos/nvbitfi/tree/new_gpus_support).
+
+
+### Python libraries installation
 
 Then install all the Python requirements.
 
@@ -81,3 +97,7 @@ To cite this work:
 
 ```
 
+# Colaboration
+
+If you encounter any issues with the code or feel that there is room for improvement,
+please feel free to submit a pull request or open an issue.
