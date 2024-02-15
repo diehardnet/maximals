@@ -94,7 +94,15 @@ TODO: Lucas to put the sample-tool
 To cite this work:
 
 ```bibtex
-
+@unpublished{roquet2023,
+  TITLE = {{Cross-Layer Reliability Evaluation and Efficient Hardening of Large Vision Transformers Models}},
+  AUTHOR = {Roquet, Lucas and Fernandes dos Santos, Fernando and Rech, Paolo and Traiola, Marcello and Sentieys, Olivier and Kritikakou, Angeliki},
+  URL = {https://hal.science/hal-04456702},
+  NOTE = {working paper or preprint},
+  YEAR = {2024},
+  MONTH = Feb,
+  KEYWORDS = {Reliability ; Vision transformers ; GPU ; Radiation-induced effects},
+}
 ```
 
 # Colaboration
