@@ -81,12 +81,8 @@ Then to run the same model for 20 iterations:
                     --goldpath ./data/vit_base_patch32_224.sam_torch_compile_False_hardening_hardenedid.pt \
                     --model vit_base_patch32_224.sam
 ```
-
-### Using the libLogHelper free version for profiling
-
-TODO: Lucas to put the sample-tool
-
-#### Faults injections with NVBITFI
+ 
+### Faults injections with NVBITFI
 
 The **Nvidia Bit Fault Injector** allows to inject fault at assembly level. We used it to inject faults on the tool we created to evaluate our technique.
 
@@ -106,6 +102,13 @@ inst_value_igid_bfm_map = {
     G_FP32: [FLIP_SINGLE_BIT, RANDOM_VALUE, WARP_RANDOM_VALUE], # 32 bits Floating point instructions
 }
 ```
+
+#### ViTs profiling
+
+To implement the technique, we needed to know what are the minimum and maximum values that pass throught each ViT on the whole Imagenet Validation set. In order to get the MIN and MAX values for each model, we perform an inference on each image of the dataset and save the MIN and MAX values for each model.
+
+Once we have the values, we can create the `HardenedIdentity` class that exhaustively apply the value range for the running model. If the value is not in the range, then the unwanted value is replaced by either MIN or MAX.
+
 
 #### Sample Tool
 
