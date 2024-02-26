@@ -86,6 +86,36 @@ Then to run the same model for 20 iterations:
 
 TODO: Lucas to put the sample-tool
 
+#### Faults injections with NVBITFI
+
+The **Nvidia Bit Fault Injector** allows to inject fault at assembly level. We used it to inject faults on the tool we created to evaluate our technique.
+
+The injector allow to inject fault for different instruction types and at different sites. We used a modified version of NVBITFI (https://github.com/fernandoFernandeSantos/nvbitfi/tree/master) that allows to inject faults on GPU warps.
+
+We targeted the following sites : 
+- **General Purpose Registers** : injecting *single bit flips* and *random values*
+- **Load instructions** : injecting *single bit flips* and *random values*
+- **32 bits Floating point instructions** : injecting *single bit flips*, *random values* and *random values on warps*
+
+
+```python
+# values for params.py script
+inst_value_igid_bfm_map = {
+    G_GP: [FLIP_SINGLE_BIT, RANDOM_VALUE], # General Purpose Registers
+    G_LD: [FLIP_SINGLE_BIT, RANDOM_VALUE], # Load instructions
+    G_FP32: [FLIP_SINGLE_BIT, RANDOM_VALUE, WARP_RANDOM_VALUE], # 32 bits Floating point instructions
+}
+```
+
+#### Sample Tool
+
+In order to test our technique, we created a tool to perform an inference on a batch of 5 images from the **ImageNet Validation Set**. The tool allows us to perform multiple things. It works in two modes : **save** and **load**. 
+
+The **save** mode will save the result of the inference to a file as a *gold save* to determine if later inferences are fault free or not. 
+
+The **load** will perform the inference on the same batch and will load the *gold save* file to compare the outputs of the inference. We check if the values in the output are different (Tolerable SDC) and also if the classification has changed (Critical SDC).
+
+Adding to that, we can choose if the ViT model has to be in normal mode or hardened mode. By setting the *hardened* option, it will load the wanted ViT model and then replace all the Identity Layers by the hardened ones.
 
 
 
