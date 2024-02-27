@@ -128,12 +128,16 @@ To cite this work:
 
 ```bibtex
 @inproceedings{roquet2023,
-  TITLE = {{Cross-Layer Reliability Evaluation and Efficient Hardening of Large Vision Transformers Models}},
-  AUTHOR = {Roquet, Lucas and Fernandes dos Santos, Fernando and Rech, Paolo and Traiola, Marcello and Sentieys, Olivier and Kritikakou, Angeliki},
+  TITLE = {{Cross-Layer Reliability Evaluation and
+          Efficient Hardening of Large Vision Transformers Models}},
+  AUTHOR = {Roquet, Lucas and Fernandes dos Santos,
+            Fernando and Rech, Paolo and Traiola, Marcello and
+            Sentieys, Olivier and Kritikakou, Angeliki},
   URL = {https://hal.science/hal-04456702},
   YEAR = {2024},
   MONTH = Feb,
-  KEYWORDS = {Reliability ; Vision transformers ; GPU ; Radiation-induced effects},
+  KEYWORDS = {Reliability ; Vision transformers ;
+              GPU ; Radiation-induced effects},
   PDF = {https://hal.science/hal-04456702/file/dac_2024_vits.pdf},
   HAL_ID = {hal-04456702},
   BOOKTITLE    = {IEEE/ACM Design and Automation Conference (DAC)},
