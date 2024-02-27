@@ -84,9 +84,9 @@ Then to run the same model for 20 iterations:
  
 ### Faults injections with NVBITFI
 
-The **Nvidia Bit Fault Injector** allows to inject fault at assembly level. We used it to inject faults on the tool we created to evaluate our technique.
+The **Nvidia Bit Fault Injector** allows to inject faults at the SASS level. We used it to inject faults on the tool we created to evaluate our technique.
 
-The injector allow to inject fault for different instruction types and at different sites. We used a modified version of NVBITFI (https://github.com/fernandoFernandeSantos/nvbitfi/tree/master) that allows to inject faults on GPU warps.
+The injector allows to inject faults for different instruction types and at different sites. We used a [modified version of NVBITFI](https://github.com/fernandoFernandeSantos/nvbitfi/tree/master) that allows us to inject faults on GPU warps.
 
 We targeted the following sites : 
 - **General Purpose Registers** : injecting *single bit flips* and *random values*
@@ -105,20 +105,20 @@ inst_value_igid_bfm_map = {
 
 #### ViTs profiling
 
-To implement the technique, we needed to know what are the minimum and maximum values that pass throught each ViT on the whole Imagenet Validation set. In order to get the MIN and MAX values for each model, we perform an inference on each image of the dataset and save the MIN and MAX values for each model.
+To implement the technique, we needed to know what are the minimum and maximum values that pass through each ViT Identity layer on the whole Imagenet Validation set. In order to get the MIN and MAX values for each model, we perform an inference on each image of the dataset and save the MIN and MAX values for each model.
 
-Once we have the values, we can create the `HardenedIdentity` class that exhaustively apply the value range for the running model. If the value is not in the range, then the unwanted value is replaced by either MIN or MAX.
+Once we had the values, we created the `HardenedIdentity` class that exhaustively applies the value range for the running model. If the value is not in the range, then the unwanted value is replaced by either MIN or MAX.
 
 
 #### Sample Tool
 
-In order to test our technique, we created a tool to perform an inference on a batch of 5 images from the **ImageNet Validation Set**. The tool allows us to perform multiple things. It works in two modes : **save** and **load**. 
+In order to test our technique, [we created a tool to perform an inference on a batch of 5 images from the **ImageNet Validation Set**](https://github.com/lucasrqt/sample_tool). The tool allows us to perform multiple things. It works in two modes: **save** and **load**. 
 
-The **save** mode will save the result of the inference to a file as a *gold save* to determine if later inferences are fault free or not. 
+The **save** mode will save the result of the inference to a file as a *gold save* to determine if later inferences are fault-free or not. 
 
 The **load** will perform the inference on the same batch and will load the *gold save* file to compare the outputs of the inference. We check if the values in the output are different (Tolerable SDC) and also if the classification has changed (Critical SDC).
 
-Adding to that, we can choose if the ViT model has to be in normal mode or hardened mode. By setting the *hardened* option, it will load the wanted ViT model and then replace all the Identity Layers by the hardened ones.
+Adding to that, we can choose if the ViT model has to be in normal mode or hardened mode. By setting the *hardened* option, it will load the wanted ViT model and then replace all the Identity Layers with the hardened ones.
 
 
 
@@ -127,14 +127,16 @@ Adding to that, we can choose if the ViT model has to be in normal mode or harde
 To cite this work:
 
 ```bibtex
-@unpublished{roquet2023,
+@inproceedings{roquet2023,
   TITLE = {{Cross-Layer Reliability Evaluation and Efficient Hardening of Large Vision Transformers Models}},
   AUTHOR = {Roquet, Lucas and Fernandes dos Santos, Fernando and Rech, Paolo and Traiola, Marcello and Sentieys, Olivier and Kritikakou, Angeliki},
   URL = {https://hal.science/hal-04456702},
-  NOTE = {working paper or preprint},
   YEAR = {2024},
   MONTH = Feb,
   KEYWORDS = {Reliability ; Vision transformers ; GPU ; Radiation-induced effects},
+  PDF = {https://hal.science/hal-04456702/file/dac_2024_vits.pdf},
+  HAL_ID = {hal-04456702},
+  BOOKTITLE    = {IEEE/ACM Design and Automation Conference (DAC)},
 }
 ```
 
