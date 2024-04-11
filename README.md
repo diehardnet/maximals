@@ -1,4 +1,4 @@
-# Maximum corrupted Malicious values (MaxiMals)
+# <ins>MaxiM</ins>um corrupted v<ins>al</ins>ue<ins>s</ins> (MaxiMals)
 
 MaxiMals is a set of Transformers hardened for reliability.
 
