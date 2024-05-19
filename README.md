@@ -1,3 +1,7 @@
+<div align="center">
+  <img src=".assets/maximal.png" width="40%">
+</div>
+
 # <ins>MaxiM</ins>um corrupted v<ins>al</ins>ue<ins>s</ins> (MaxiMals)
 
 MaxiMals is a set of Transformers hardened for reliability.
