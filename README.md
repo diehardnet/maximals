@@ -148,7 +148,7 @@ To cite this work:
 }
 ```
 
-# Colaboration
+# Collaboration
 
 If you encounter any issues with the code or feel that there is room for improvement,
 please feel free to submit a pull request or open an issue.
